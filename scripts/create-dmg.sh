@@ -10,6 +10,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR/.."
 RELEASE_DIR=".build/release"
+PROJECT_RELEASE_DIR="release"
 APP_NAME="PowerMate Agent"
 DMG_NAME="PowerMateAgent-1.0.0.dmg"
 
@@ -40,4 +41,8 @@ hdiutil create -volname "$VOL_NAME" -srcfolder "dmg-layout" -ov -format UDZO -im
 rm -rf dmg-layout
 cd ../..
 
+mkdir -p "$PROJECT_RELEASE_DIR"
+cp "$RELEASE_DIR/$DMG_NAME" "$PROJECT_RELEASE_DIR/$DMG_NAME"
+
 echo "Created $RELEASE_DIR/$DMG_NAME"
+echo "Copied to project folder: $PROJECT_RELEASE_DIR/$DMG_NAME"

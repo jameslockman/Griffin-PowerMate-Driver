@@ -12,6 +12,7 @@ set -e
 cd "$(dirname "$0")/.."
 [ -x "scripts/build-app.sh" ] || chmod +x scripts/build-app.sh
 RELEASE_DIR=".build/release"
+PROJECT_RELEASE_DIR="release"
 APP_NAME="PowerMate Agent"
 DMG_NAME="PowerMateAgent-1.0.0.dmg"
 SECRETS="secrets.json"
@@ -75,4 +76,8 @@ xcrun notarytool submit "$RELEASE_DIR/$DMG_NAME" \
 echo "Stapling notarization ticket to DMG..."
 xcrun stapler staple "$RELEASE_DIR/$DMG_NAME"
 
+mkdir -p "$PROJECT_RELEASE_DIR"
+cp "$RELEASE_DIR/$DMG_NAME" "$PROJECT_RELEASE_DIR/$DMG_NAME"
+
 echo "Done. Notarized DMG: $RELEASE_DIR/$DMG_NAME"
+echo "Copied to project folder: $PROJECT_RELEASE_DIR/$DMG_NAME"
