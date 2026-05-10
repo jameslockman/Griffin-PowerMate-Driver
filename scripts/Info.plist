@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>PowerMateAgent</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.example.PowerMateAgent</string>
+	<key>CFBundleName</key>
+	<string>PowerMate Agent</string>
+	<key>CFBundleDisplayName</key>
+	<string>PowerMate Agent</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 James Lockman Consulting. All rights reserved. This software is provided "as is" without warranty of any kind. It may be used for any purpose, commercial or non-commercial, at the user's own risk. The author is not liable for any damages resulting from the use of this software. It may be redistributed and modified under the terms of the MIT License.</string>
+</dict>
+</plist>
