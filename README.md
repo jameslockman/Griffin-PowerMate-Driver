@@ -4,7 +4,7 @@ This small driver enables the Griffin PowerMate, a nifty little device from days
 
 When it was released, it was intended to assist video and audio production by adding a scrollable knob to your desktop. Of course, modern controllers exist that offer many more literal bells and whistles, but there is something... quaint... about this early device.
 
-To install, open the DMG and drag **PowerMate Agent** to your Applications folder. Then, launch **PowerMate Agent**.  Of course, it won't do anything without a PowerMate, so go dig around in your junk USB drawer and dust it off! You will see a new item in your top menu to control the behavior of the PowerMate.
+To install, download the latest release from the [releases tab]([url](https://github.com/jameslockman/Griffin-PowerMate-Driver/releases)). Download and open the DMG, and then drag **PowerMate Agent** to your Applications folder. Then, launch **PowerMate Agent**.  Of course, it won't do anything without a PowerMate, so go dig around in your junk USB drawer and dust it off! You will see a new item in your top menu to control the behavior of the PowerMate.
 
 <img width="479" height="153" alt="Where to find PowerMate Agent" src="https://github.com/user-attachments/assets/623bdfa6-8c20-4f3a-8ca6-82d33fadadff" />
 
