@@ -5,7 +5,9 @@ This small driver enables the Griffin PowerMate, a nifty little device from days
 When it was released, it was intended to assist video and audio production by adding a scrollable knob to your desktop. Of course, modern controllers exist that offer many more literal bells and whistles, but there is something... quaint... about this early device.
 
 To install, open the DMG and drag **PowerMate Agent** to your Applications folder. Then, launch **PowerMate Agent**.  Of course, it won't do anything without a PowerMate, so go dig around in your junk USB drawer and dust it off! You will see a new item in your top menu to control the behavior of the PowerMate.
-<img width="424" height="135" alt="Where to locate PowerMate Agent in the menu bar" src="https://github.com/user-attachments/assets/31c29dd7-36f1-418b-98ec-e4cdc850e932" />
+
+<img width="479" height="153" alt="Where to find PowerMate Agent" src="https://github.com/user-attachments/assets/623bdfa6-8c20-4f3a-8ca6-82d33fadadff" />
+
 
 The PowerMate acts as a scroll control, so if the active window or control has a scroll option, turning the dial will scroll the window or increase/decrease selected value. You can reverse the scroll direction if you don't like the default scroll direction.
 
@@ -16,6 +18,9 @@ The PowerMate also acts as a mouse button. A momentary push of the button acts a
 All configuration choices (scroll direction, audio controls, long-press action) are saved automatically and restored the next time the app launches.
 
 On first launch, PowerMate Agent will prompt you to grant **Accessibility** permission if it hasn't been granted yet. PowerMate Agent uses the accesibility framework to interact with scrollable items and menus.
+
+<img width="271" height="361" alt="Accessibility controls warning" src="https://github.com/user-attachments/assets/25ea63ea-03ee-450f-a72b-5159e43034a0" />
+
 
 Pretty simple, eh?
 
