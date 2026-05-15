@@ -5,15 +5,21 @@ This small driver enables the Griffin PowerMate, a nifty little device from days
 When it was released, it was intended to assist video and audio production by adding a scrollable knob to your desktop. Of course, modern controllers exist that offer many more literal bells and whistles, but there is something... quaint... about this early device.
 
 To install, open the DMG and drag **PowerMate Agent** to your Applications folder. Then, launch **PowerMate Agent**.  Of course, it won't do anything without a PowerMate, so go dig around in your junk USB drawer and dust it off! You will see a new item in your top menu to control the behavior of the PowerMate.
-<img width="424" height="135" alt="Screenshot_5_10_26__9_27 AM" src="https://github.com/user-attachments/assets/31c29dd7-36f1-418b-98ec-e4cdc850e932" />
+<img width="424" height="135" alt="Where to locate PowerMate Agent in the menu bar" src="https://github.com/user-attachments/assets/31c29dd7-36f1-418b-98ec-e4cdc850e932" />
 
 The PowerMate acts as a scroll control, so if the active window or control has a scroll option, turning the dial will scroll the window or increase/decrease selected value. You can reverse the scroll direction if you don't like the default scroll direction.
 
 The PowerMate also acts as a mouse button. A momentary push of the button acts as a mouse click. A long-press of the button acts as a right-click. You can also change the behavior so that a long-press acts as a double-click.
 
+**Audio controls**: Enable "Default to audio controls" in the menu and the knob adjusts system volume while the button toggles mute. Holding the **Fn key** temporarily flips the current mode — if audio controls are off, Fn switches to audio; if audio controls are on, Fn switches back to scrolling. This lets you quickly switch between modes without touching the menu.
+
+All configuration choices (scroll direction, audio controls, long-press action) are saved automatically and restored the next time the app launches.
+
+On first launch, PowerMate Agent will prompt you to grant **Accessibility** permission if it hasn't been granted yet. PowerMate Agent uses the accesibility framework to interact with scrollable items and menus.
+
 Pretty simple, eh?
 
-## Technical details.
+## Technical details if you want to fork this repo and build your own.
 
 A small macOS driver that opens the **Griffin PowerMate** (VID `0x077d`, PID `0x0410`) over USB HID, reads its 6-byte reports, and exposes **button** and **rotation** events so you can map them to actions (e.g. scroll, click, media keys).
 
@@ -38,11 +44,15 @@ With the PowerMate plugged in, turn the knob or press the button; the demo print
 
 **PowerMateAgent** turns the knob and button into keyboard/scroll events that **any application** receives (browser, editor, etc.):
 
-- **Rotation** → vertical scroll, or **Up/Down arrow keys** when a menu (or submenu) is focused.
-- **Click** (short press) → **left mouse button** (at cursor), or **Return** when a menu is focused (chooses the highlighted item).
-- **Long press** → **right mouse button** (at cursor).
+- **Rotation** → vertical scroll, or **Up/Down arrow keys** when a menu (or submenu) is focused, or **system volume** in audio control mode.
+- **Click** (short press) → **left mouse button** (at cursor), or **Return** when a menu is focused (chooses the highlighted item), or **mute/unmute** in audio control mode.
+- **Long press** → **right mouse button** (configurable to double-click) and activates menu mode.
 
-Menu and submenu detection uses the **Accessibility** API: when the focused UI element is a menu (including submenus), rotation sends arrow keys and click sends Return. Grant **Accessibility** in System Settings → Privacy & Security so submenus work without “sticking” to scroll. A long-press still enters a fallback “menu mode” (arrow keys until click or 5‑second timeout) if Accessibility is not enabled.  
+**Menu detection** uses the Accessibility API: when the focused UI element is a menu or submenu, rotation sends arrow keys and click sends Return. A long-press also enters a fallback “menu mode” (arrow keys until click or 5-second timeout) if Accessibility is not enabled.
+
+**Audio control mode** — enable “Default to audio controls” in the menu, or hold **Fn** to temporarily switch. Fn always flips the current mode: Fn + audio-off = audio on; Fn + audio-on = scroll.
+
+**Persistent settings** — scroll direction, audio mode, and long-press action are remembered across launches.
 
 The LED throbs while you turn and goes dim when idle; full on while the button is held.
 
@@ -139,3 +149,10 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 - [Linux PowerMate driver](https://gitlab.eclipse.org/eclipse/oniro-core/linux/-/blob/master/drivers/input/misc/powermate.c) (report format: byte 0 = button, byte 1 = rotation)  
 - [Resurrecting the Griffin PowerMate on Linux](https://www.gilesorr.com/blog/powermate-on-linux.html)  
 - Apple IOKit HID: `IOHIDManager`, `IOHIDDeviceOpen`, `IOHIDDeviceRegisterInputReportCallback`
+
+### Versions
+#### 1.0.1
+Added Audio controls, settings persistence and accessibility permissions check. Also made the scrolling function smoother.
+
+#### 1.0.0
+Initial release. Includes scrolling and clicking, with optional double-click or right-click for long presses.

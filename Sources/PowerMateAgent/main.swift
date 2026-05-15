@@ -3,8 +3,10 @@
 //  PowerMateAgent — runs in the background and turns PowerMate input into
 //  keyboard/scroll events that any application can receive.
 //
-//  Rotation   → scroll, or arrow keys when a menu/submenu is focused
-//  Click      → left mouse (at cursor), or Return when a menu is focused
+//  Rotation   → scroll, or arrow keys when a menu/submenu is focused,
+//               or system volume when audio controls are enabled
+//  Click      → left mouse (at cursor), or Return when a menu is focused,
+//               or mute/unmute when audio controls are enabled
 //  Long press → right mouse button (then arrow keys until timeout or click)
 //
 //  Menu and submenu detection uses the Accessibility API so rotation and click
@@ -20,21 +22,32 @@ import PowerMateDriver
 
 let driver = PowerMateDriver()
 
-// Scroll: lines per knob step (sensitivity); user can reverse direction via menu
-let scrollLinesPerStep: Int32 = 2
-var scrollReversed = false
+// Scroll: pixels per knob delta unit; user can reverse direction via menu.
+// Pixel units + isContinuous = 1 produces trackpad-style smooth scrolling rather
+// than the discrete line jumps that .line units give.
+let scrollPixelsPerStep: Int32 = 20
+
+// Persistent settings via UserDefaults
+private let defaults = UserDefaults.standard
+private let kScrollReversed    = "scrollReversed"
+private let kAudioControl      = "audioControlEnabled"
+private let kLongPressAction   = "longPressAction"
+
+var scrollReversed     = defaults.bool(forKey: kScrollReversed)
+var audioControlEnabled = defaults.bool(forKey: kAudioControl)
 
 func postScroll(delta: Int) {
-    var lines = Int32(delta) * scrollLinesPerStep
-    if scrollReversed { lines = -lines }
+    var pixels = Int32(delta) * scrollPixelsPerStep
+    if scrollReversed { pixels = -pixels }
     guard let event = CGEvent(
         scrollWheelEvent2Source: nil,
-        units: .line,
+        units: .pixel,
         wheelCount: 1,
-        wheel1: lines,
+        wheel1: pixels,
         wheel2: 0,
         wheel3: 0
     ) else { return }
+    event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
     event.post(tap: .cghidEventTap)
 }
 
@@ -148,6 +161,40 @@ func exitMenuMode() {
     menuModeTimeout = nil
 }
 
+// Audio controls: when enabled, knob adjusts system volume and button toggles mute,
+// replacing scroll/click entirely (menu behavior still takes priority).
+// Holding Fn temporarily flips the mode: enables audio when off, restores scroll when on.
+func useAudioBehavior() -> Bool {
+    let fnHeld = NSEvent.modifierFlags.contains(.function)
+    let wantAudio = audioControlEnabled != fnHeld   // XOR: Fn flips whatever the setting is
+    return wantAudio && !useMenuBehavior()
+}
+
+// Volume and mute via NX system-defined media key events — same path as F11/F12/F10.
+// One event per knob tick = one hardware volume step (~4% per step, finer than F11/F12).
+// NX_KEYTYPE_SOUND_UP = 0, NX_KEYTYPE_SOUND_DOWN = 1, NX_KEYTYPE_MUTE = 7
+private func postMediaKey(_ keyType: Int32, keyDown: Bool) {
+    let flags = NSEvent.ModifierFlags(rawValue: keyDown ? 0xa00 : 0xb00)
+    let data1 = Int(keyType) << 16 | (keyDown ? 0x0a00 : 0x0b00)
+    guard let event = NSEvent.otherEvent(
+        with: .systemDefined,
+        location: .zero,
+        modifierFlags: flags,
+        timestamp: ProcessInfo.processInfo.systemUptime,
+        windowNumber: 0,
+        context: nil,
+        subtype: 8,
+        data1: data1,
+        data2: -1
+    ) else { return }
+    event.cgEvent?.post(tap: .cghidEventTap)
+}
+
+func toggleMute() {
+    postMediaKey(7, keyDown: true)
+    postMediaKey(7, keyDown: false)
+}
+
 driver.onRotate = { delta, _ in
     DispatchQueue.main.async {
         lastRotationTime = CFAbsoluteTimeGetCurrent()
@@ -163,6 +210,12 @@ driver.onRotate = { delta, _ in
                 menuModeTimeout = work
                 DispatchQueue.main.asyncAfter(deadline: .now() + menuModeTimeoutInterval, execute: work)
             }
+        } else if useAudioBehavior() {
+            let keyType: Int32 = delta > 0 ? 0 : 1
+            for _ in 0..<abs(delta) {
+                postMediaKey(keyType, keyDown: true)
+                postMediaKey(keyType, keyDown: false)
+            }
         } else {
             postScroll(delta: delta)
         }
@@ -175,6 +228,8 @@ driver.onClick = {
             postKey(kReturnKey)
             // Do not exit menu mode here: a submenu may open and we need to keep sending arrow keys.
             // Menu mode will exit on the 5-second timeout when the user stops rotating.
+        } else if useAudioBehavior() {
+            toggleMute()
         } else {
             exitMenuMode()
             postMouseClick(button: .left)
@@ -184,7 +239,9 @@ driver.onClick = {
 
 // Long-press action: right-click or double-click (chosen in menu)
 enum LongPressAction { case rightClick, doubleClick }
-var longPressAction: LongPressAction = .rightClick
+var longPressAction: LongPressAction = {
+    defaults.string(forKey: kLongPressAction) == "doubleClick" ? .doubleClick : .rightClick
+}()
 
 driver.onLongPress = {
     enterMenuMode()
@@ -268,11 +325,13 @@ app.setActivationPolicy(.accessory)
 
 final class MenuHandler: NSObject, NSMenuDelegate {
     var reverseScrollItem: NSMenuItem!
+    var audioControlItem: NSMenuItem!
     var longPressRightItem: NSMenuItem!
     var longPressDoubleItem: NSMenuItem!
 
     func updateMenuState() {
         reverseScrollItem.state = scrollReversed ? .on : .off
+        audioControlItem.state = audioControlEnabled ? .on : .off
         longPressRightItem.state = (longPressAction == .rightClick) ? .on : .off
         longPressDoubleItem.state = (longPressAction == .doubleClick) ? .on : .off
     }
@@ -283,16 +342,25 @@ final class MenuHandler: NSObject, NSMenuDelegate {
 
     @objc func toggleScrollReversed() {
         scrollReversed.toggle()
+        defaults.set(scrollReversed, forKey: kScrollReversed)
+        updateMenuState()
+    }
+
+    @objc func toggleAudioControl() {
+        audioControlEnabled.toggle()
+        defaults.set(audioControlEnabled, forKey: kAudioControl)
         updateMenuState()
     }
 
     @objc func setLongPressRightClick() {
         longPressAction = .rightClick
+        defaults.set("rightClick", forKey: kLongPressAction)
         updateMenuState()
     }
 
     @objc func setLongPressDoubleClick() {
         longPressAction = .doubleClick
+        defaults.set("doubleClick", forKey: kLongPressAction)
         updateMenuState()
     }
 }
@@ -305,6 +373,11 @@ if let button = statusItem.button {
 }
 let menu = NSMenu()
 menu.delegate = menuHandler
+
+let audioItem = NSMenuItem(title: "Default to audio controls", action: #selector(MenuHandler.toggleAudioControl), keyEquivalent: "")
+audioItem.target = menuHandler
+menuHandler.audioControlItem = audioItem
+menu.addItem(audioItem)
 
 let reverseItem = NSMenuItem(title: "Reverse scroll direction", action: #selector(MenuHandler.toggleScrollReversed), keyEquivalent: "")
 reverseItem.target = menuHandler
@@ -326,11 +399,31 @@ longPressSub.submenu = longPressMenu
 menu.addItem(longPressSub)
 
 menu.addItem(NSMenuItem.separator())
-let quitItem = NSMenuItem(title: "Quit PowerMate Agent", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+let quitItem = NSMenuItem(title: "Quit PowerMate Agent", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
 quitItem.target = app
 menu.addItem(quitItem)
 statusItem.menu = menu
 menuHandler.updateMenuState()
+
+/// Check Accessibility permission; if missing, show a one-time alert directing the user to grant it.
+func checkAccessibilityPermission() {
+    guard !AXIsProcessTrusted() else { return }
+    let alert = NSAlert()
+    alert.messageText = "Accessibility Permission Required"
+    alert.informativeText = "PowerMate Agent needs Accessibility access to detect menus and send keyboard events.\n\nGo to System Settings → Privacy & Security → Accessibility and enable PowerMate Agent."
+    alert.alertStyle = .warning
+    alert.addButton(withTitle: "Open System Settings")
+    alert.addButton(withTitle: "Later")
+    if alert.runModal() == .alertFirstButtonReturn {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+}
+
+DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+    checkAccessibilityPermission()
+}
 
 app.activate(ignoringOtherApps: true)
 app.run()

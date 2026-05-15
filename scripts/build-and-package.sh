@@ -14,7 +14,8 @@ cd "$(dirname "$0")/.."
 RELEASE_DIR=".build/release"
 PROJECT_RELEASE_DIR="release"
 APP_NAME="PowerMate Agent"
-DMG_NAME="PowerMateAgent-1.0.0.dmg"
+VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" scripts/Info.plist)
+DMG_NAME="PowerMateAgent-${VERSION}.dmg"
 SECRETS="secrets.json"
 
 if [ ! -f "$SECRETS" ]; then
@@ -52,7 +53,7 @@ codesign --force --deep --sign "$DEVELOPER_ID_CERT" \
 
 echo "Creating DMG (app + Applications alias, .DS_Store for large icon view)..."
 hdiutil detach "/Volumes/PowerMate Agent" 2>/dev/null || true
-hdiutil detach "/Volumes/PowerMateAgent-1.0.0" 2>/dev/null || true
+hdiutil detach "/Volumes/PowerMateAgent-${VERSION}" 2>/dev/null || true
 DMG_LAYOUT="$RELEASE_DIR/dmg-layout"
 rm -rf "$DMG_LAYOUT"
 mkdir -p "$DMG_LAYOUT"
@@ -62,7 +63,7 @@ if [ -f "scripts/dmg.DS_Store" ]; then
   cp "scripts/dmg.DS_Store" "$DMG_LAYOUT/.DS_Store"
 fi
 cd "$RELEASE_DIR"
-hdiutil create -volname "PowerMateAgent-1.0.0" -srcfolder "dmg-layout" -ov -format UDZO -imagekey zlib-level=9 "$DMG_NAME"
+hdiutil create -volname "PowerMateAgent-${VERSION}" -srcfolder "dmg-layout" -ov -format UDZO -imagekey zlib-level=9 "$DMG_NAME"
 rm -rf dmg-layout
 cd ../..
 
