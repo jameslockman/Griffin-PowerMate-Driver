@@ -12,10 +12,11 @@ cd "$SCRIPT_DIR/.."
 RELEASE_DIR=".build/release"
 PROJECT_RELEASE_DIR="release"
 APP_NAME="PowerMate Agent"
-DMG_NAME="PowerMateAgent-1.0.0.dmg"
+VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$SCRIPT_DIR/Info.plist")
+DMG_NAME="PowerMateAgent-${VERSION}.dmg"
 
 # Use a volume name that's unlikely to be already mounted (avoids conflicts)
-VOL_NAME="PowerMateAgent-1.0.0"
+VOL_NAME="PowerMateAgent-${VERSION}"
 
 if [ ! -d "$RELEASE_DIR/${APP_NAME}.app" ]; then
   echo "Missing $RELEASE_DIR/${APP_NAME}.app — run scripts/build-app.sh first."
