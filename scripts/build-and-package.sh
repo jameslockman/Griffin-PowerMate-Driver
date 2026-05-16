@@ -46,9 +46,10 @@ APP_SPECIFIC_PASSWORD="${vals[3]}"
 echo "Building app bundle..."
 ./scripts/build-app.sh
 
-echo "Signing with Developer ID (runtime)..."
+echo "Signing with Developer ID (runtime + entitlements)..."
 codesign --force --deep --sign "$DEVELOPER_ID_CERT" \
   --options runtime \
+  --entitlements "scripts/PowerMateAgent.entitlements" \
   "$RELEASE_DIR/${APP_NAME}.app"
 
 echo "Creating DMG (app + Applications alias, .DS_Store for large icon view)..."

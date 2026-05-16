@@ -32,7 +32,7 @@ let package = Package(
             name: "PowerMateAgent",
             dependencies: ["PowerMateDriver"],
             path: "Sources/PowerMateAgent",
-            linkerSettings: [.linkedFramework("CoreGraphics"), .linkedFramework("AppKit"), .linkedFramework("ApplicationServices")]
+            linkerSettings: [.linkedFramework("CoreGraphics"), .linkedFramework("AppKit"), .linkedFramework("ApplicationServices"), .linkedFramework("CoreAudio")]
         ),
     ]
 )
