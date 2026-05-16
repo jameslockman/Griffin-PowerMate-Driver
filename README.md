@@ -6,7 +6,7 @@ When it was released, it was intended to assist video and audio production by ad
 
 To install, download the latest release from the [releases tab](https://github.com/jameslockman/Griffin-PowerMate-Driver/releases). Download and open the DMG, and then drag **PowerMate Agent** to your Applications folder. Then, launch **PowerMate Agent**.  Of course, it won't do anything without a PowerMate, so go dig around in your junk USB drawer and dust it off! You will see a new item in your top menu to control the behavior of the PowerMate. If you want it to launch when you start your Mac, add it to your startup items.
 
-
+![Where to find PowerMate Agent](https://raw.githubusercontent.com/jameslockman/Griffin-PowerMate-Driver/refs/heads/main/images/menuBar.png)
 
 The PowerMate acts as a scroll control, so if the active window or control has a scroll option, turning the dial will scroll the window or increase/decrease selected value. You can reverse the scroll direction if you don't like the default scroll direction.
 
@@ -20,11 +20,11 @@ All configuration choices (scroll direction, audio controls, long-press action) 
 
 On first launch, PowerMate Agent will prompt you to grant **Accessibility** permission. When you first enable audio controls, it will also prompt for **Audio Capture** permission. Both are required for full functionality.
 
+![Permissions check dialog](https://raw.githubusercontent.com/jameslockman/Griffin-PowerMate-Driver/refs/heads/main/images/permissionsDialog.png)
 
+![Accessibility Permissions](https://raw.githubusercontent.com/jameslockman/Griffin-PowerMate-Driver/refs/heads/main/images/accessibilityPermissions.png)
 
-
-
-
+![Audio Permissions](https://raw.githubusercontent.com/jameslockman/Griffin-PowerMate-Driver/refs/heads/main/images/audioPermissions.png)
 
 Pretty simple, eh?
 
