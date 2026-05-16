@@ -163,6 +163,12 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 
 ### Versions
 
+#### 1.0.3
+
+Added audio cue for when mode changes.
+Icon now has blue ring when in Audio Mode.
+Audio Mode is now called... Audio mode.
+
 #### 1.0.2
 
 Added LED VU meter (tracks system audio amplitude via `AudioHardwareCreateProcessTap`), Fn-key mode flip, long-press toggle for audio/scroll mode, Audio Capture permission handling, blue menu bar icon when audio mode is active, and custom sound file support. Updated app identifier string.
