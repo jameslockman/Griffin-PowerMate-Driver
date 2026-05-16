@@ -171,6 +171,44 @@ func useAudioBehavior() -> Bool {
     return wantAudio && !useMenuBehavior()
 }
 
+// Accumulator so the knob requires multiple ticks per volume step.
+// Raise volumeTicksPerStep to slow the rate of change; lower it to speed it up.
+private var volumeAccumulator = 0
+private let volumeTicksPerStep = 4
+
+/// Load a sound by name, checking the app bundle Resources first, then falling back to system sounds.
+/// Place custom files named e.g. "ToAudio.aiff" / "ToScroll.aiff" in scripts/Sounds/ and they will
+/// be bundled into the app automatically by build-app.sh.
+private func loadSound(_ name: String) -> NSSound? {
+    if let url = Bundle.main.url(forResource: name, withExtension: nil)
+        ?? Bundle.main.url(forResource: name, withExtension: "aiff")
+        ?? Bundle.main.url(forResource: name, withExtension: "wav")
+        ?? Bundle.main.url(forResource: name, withExtension: "mp3") {
+        return NSSound(contentsOf: url, byReference: false)
+    }
+    return NSSound(named: NSSound.Name(name))
+}
+
+/// Flash the LED twice and play a sound to confirm a mode switch.
+/// toAudio: true  → switching into audio mode ("ToAudio" bundle sound or "Tink" fallback)
+/// toAudio: false → switching back to scroll mode ("ToScroll" bundle sound or "Glass" fallback)
+func signalModeChange(toAudio: Bool) {
+    ledQueue.async {
+        for _ in 0..<2 {
+            _ = driver.setLEDBrightness(255)
+            Thread.sleep(forTimeInterval: 0.055)
+            _ = driver.setLEDBrightness(0)
+            Thread.sleep(forTimeInterval: 0.055)
+        }
+        _ = driver.setLEDBrightness(80)
+    }
+    DispatchQueue.main.async {
+        let sound = toAudio ? loadSound("ToAudio") ?? NSSound(named: "Tink")
+                            : loadSound("ToScroll") ?? NSSound(named: "Glass")
+        sound?.play()
+    }
+}
+
 // Volume and mute via NX system-defined media key events — same path as F11/F12/F10.
 // One event per knob tick = one hardware volume step (~4% per step, finer than F11/F12).
 // NX_KEYTYPE_SOUND_UP = 0, NX_KEYTYPE_SOUND_DOWN = 1, NX_KEYTYPE_MUTE = 7
@@ -212,10 +250,15 @@ driver.onRotate = { delta, _ in
                 DispatchQueue.main.asyncAfter(deadline: .now() + menuModeTimeoutInterval, execute: work)
             }
         } else if useAudioBehavior() {
-            let keyType: Int32 = delta > 0 ? 0 : 1
-            for _ in 0..<abs(delta) {
-                postMediaKey(keyType, keyDown: true)
-                postMediaKey(keyType, keyDown: false)
+            volumeAccumulator += delta
+            let steps = volumeAccumulator / volumeTicksPerStep
+            if steps != 0 {
+                volumeAccumulator -= steps * volumeTicksPerStep
+                let keyType: Int32 = steps > 0 ? 0 : 1
+                for _ in 0..<abs(steps) {
+                    postMediaKey(keyType, keyDown: true)
+                    postMediaKey(keyType, keyDown: false)
+                }
             }
         } else {
             postScroll(delta: delta)
@@ -264,11 +307,13 @@ driver.onLongPress = {
         DispatchQueue.main.async {
             audioControlEnabled.toggle()
             defaults.set(audioControlEnabled, forKey: kAudioControl)
+            volumeAccumulator = 0
             if audioControlEnabled {
                 if #available(macOS 14.2, *) { startAudioMeter() }
             } else {
                 stopAudioMeter()
             }
+            signalModeChange(toAudio: audioControlEnabled)
             menuHandler.updateMenuState()
         }
     }
@@ -457,6 +502,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         longPressRightItem.state = (longPressAction == .rightClick) ? .on : .off
         longPressDoubleItem.state = (longPressAction == .doubleClick) ? .on : .off
         longPressToggleAudioItem.state = (longPressAction == .toggleAudioMode) ? .on : .off
+        updateStatusIcon()
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -472,11 +518,13 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     @objc func toggleAudioControl() {
         audioControlEnabled.toggle()
         defaults.set(audioControlEnabled, forKey: kAudioControl)
+        volumeAccumulator = 0
         if audioControlEnabled {
             if #available(macOS 14.2, *) { startAudioMeter() }
         } else {
             stopAudioMeter()
         }
+        signalModeChange(toAudio: audioControlEnabled)
         updateMenuState()
     }
 
@@ -499,16 +547,33 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     }
 }
 
+func updateStatusIcon() {
+    guard let button = statusItem.button else { return }
+    button.contentTintColor = nil
+    if audioControlEnabled {
+        // Palette: primary layer (outer ring) adaptive, secondary layer (inner dot) blue.
+        let config = NSImage.SymbolConfiguration(paletteColors: [.labelColor, .systemBlue])
+        let img = NSImage(systemSymbolName: "circle.inset.filled", accessibilityDescription: "PowerMate Agent")?
+            .withSymbolConfiguration(config)
+        img?.isTemplate = false
+        button.image = img
+    } else {
+        let img = NSImage(systemSymbolName: "circle.inset.filled", accessibilityDescription: "PowerMate Agent")
+        img?.isTemplate = true
+        button.image = img
+    }
+}
+
 let menuHandler = MenuHandler()
 let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 if let button = statusItem.button {
-    button.image = NSImage(systemSymbolName: "circle.inset.filled", accessibilityDescription: "PowerMate Agent")
-    button.toolTip = "PowerMate Agent — scroll & click at cursor"
+    button.toolTip = "PowerMate Agent — Audo and scroll controls"
 }
+updateStatusIcon()
 let menu = NSMenu()
 menu.delegate = menuHandler
 
-let audioItem = NSMenuItem(title: "Default to audio controls", action: #selector(MenuHandler.toggleAudioControl), keyEquivalent: "")
+let audioItem = NSMenuItem(title: "Audio mode", action: #selector(MenuHandler.toggleAudioControl), keyEquivalent: "")
 audioItem.target = menuHandler
 menuHandler.audioControlItem = audioItem
 menu.addItem(audioItem)

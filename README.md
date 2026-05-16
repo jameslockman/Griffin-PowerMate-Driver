@@ -6,28 +6,24 @@ When it was released, it was intended to assist video and audio production by ad
 
 To install, download the latest release from the [releases tab](https://github.com/jameslockman/Griffin-PowerMate-Driver/releases). Download and open the DMG, and then drag **PowerMate Agent** to your Applications folder. Then, launch **PowerMate Agent**.  Of course, it won't do anything without a PowerMate, so go dig around in your junk USB drawer and dust it off! You will see a new item in your top menu to control the behavior of the PowerMate. If you want it to launch when you start your Mac, add it to your startup items.
 
-<img width="539" height="167" alt="Where to find PowerMate Agent" src="https://github.com/user-attachments/assets/18f4948b-f56c-4dc6-9695-40cee90f4855" />
 
 
 The PowerMate acts as a scroll control, so if the active window or control has a scroll option, turning the dial will scroll the window or increase/decrease selected value. You can reverse the scroll direction if you don't like the default scroll direction.
 
 The PowerMate can also act as a mouse button. A momentary push of the button acts as a mouse click when in scroll mode. A long-press of the button acts as a right-click. You can also change the behavior so that a long-press acts as a double-click or switches between scroll and audio mode.
 
-**Audio controls**: Enable "Audio mode" in the menu and the knob adjusts system volume while the button toggles mute. When audio controls are active, the LED brightens and dims in sync with the amplitude of whatever is playing through your speakers. Holding the **Fn key** temporarily flips the current mode — if audio controls are off, Fn switches to audio; if audio controls are on, Fn switches back to scrolling. This lets you quickly switch between modes without touching the menu.
+**Audio mode**: Enable "Audio mode" in the menu and the knob adjusts system volume while the button toggles mute. When audio mode is active, the LED brightens and dims in sync with the amplitude of whatever is playing through your speakers. A short sound cue confirms the switch — up when entering audio mode, and down when returning to scroll. The menu bar icon's ring turns blue while audio mode is active so you can tell at a glance which mode you're in.
 
-**Long press** can also be configured to toggle between scroll and audio mode directly — useful if you switch often and prefer not to use the Fn key.
+Holding the **Fn key** temporarily flips the current mode — if audio is off, Fn switches to audio; if audio is on, Fn switches back to scrolling. **Long press** can also be configured to toggle between modes directly, which is handy if you switch often and prefer not to use the Fn key.
 
 All configuration choices (scroll direction, audio controls, long-press action) are saved automatically and restored the next time the app launches.
 
 On first launch, PowerMate Agent will prompt you to grant **Accessibility** permission. When you first enable audio controls, it will also prompt for **Audio Capture** permission. Both are required for full functionality.
 
-<img width="924" height="490" alt="Security check" src="https://github.com/user-attachments/assets/50349512-219e-4048-b876-4b648aeb48a6" />
 
 
-<img width="724" height="575" alt="Enable Accessibility permissions" src="https://github.com/user-attachments/assets/cabfe3b0-cab5-4a6f-b6b1-de9a80f86e7b" />
 
 
-<img width="728" height="575" alt="Enable Audio Permissions" src="https://github.com/user-attachments/assets/67ae80f9-0f77-47f4-ad69-0a37b02ae4e3" />
 
 
 Pretty simple, eh?
@@ -63,7 +59,7 @@ With the PowerMate plugged in, turn the knob or press the button; the demo print
 
 **Menu detection** uses the Accessibility API: when the focused UI element is a menu or submenu, rotation sends arrow keys and click sends Return. A long-press also enters a fallback “menu mode” (arrow keys until click or 5-second timeout) if Accessibility is not enabled.
 
-**Audio control mode** — enable “Audio mode” in the menu, or hold **Fn** to temporarily switch. Fn always flips the current mode: Fn + audio-off = audio on; Fn + audio-on = scroll. Long press can also be set to toggle mode.
+**Audio mode** — enable “Audio mode” in the menu, hold **Fn** to temporarily flip, or configure long press to toggle. A “Tink” plays when entering audio mode; a “Pop” plays when returning to scroll. Fn always XORs the current mode without a sound cue since it's held, not toggled.
 
 **LED VU meter** — when audio control mode is active, the LED brightness tracks the RMS amplitude of the system audio output in real time using `AudioHardwareCreateProcessTap`.
 
@@ -121,12 +117,12 @@ driver.start()
 
 ### 3. Event types
 
-- **`PowerMateEvent.buttonDown`** / **`buttonUp`** — knob pressed / released  
-- **`PowerMateEvent.buttonClick`** — short press and release (under `longPressThreshold`).  
-- **`PowerMateEvent.buttonLongPress`** — press held at least `longPressThreshold`, then release.  
-- **`PowerMateEvent.rotate(delta: Int, rate: Double?)`** — `delta` is the signed step count (e.g. +1, -2); `rate` is derived rotation speed in deltas per second (nil on first report).
+- `**PowerMateEvent.buttonDown**` / `**buttonUp**` — knob pressed / released  
+- `**PowerMateEvent.buttonClick**` — short press and release (under `longPressThreshold`).  
+- `**PowerMateEvent.buttonLongPress**` — press held at least `longPressThreshold`, then release.  
+- `**PowerMateEvent.rotate(delta: Int, rate: Double?)**` — `delta` is the signed step count (e.g. +1, -2); `rate` is derived rotation speed in deltas per second (nil on first report).
 
-Set **`longPressThreshold`** (default 0.4 seconds) to tune what counts as a long press. Use **`onClick`** and **`onLongPress`** (or the delegate) for separate handling.
+Set `**longPressThreshold**` (default 0.4 seconds) to tune what counts as a long press. Use `**onClick**` and `**onLongPress**` (or the delegate) for separate handling.
 
 Use `driver.isConnected` to see if the device is currently opened.
 
@@ -134,9 +130,9 @@ Use `driver.isConnected` to see if the device is currently opened.
 
 The base has a blue LED you can use for feedback. Control it only when the device is connected (`isConnected == true`).
 
-- **`setLEDBrightness(_ value: UInt8)`** — static brightness 0–255 (0 = off).
-- **`setLEDPulseAsleep(_ on: Bool)`** / **`setLEDPulseAwake(_ on: Bool)`** — turn the built‑in pulse when “asleep” or “awake” on or off.
-- **`setLEDPulseMode(table:op:arg:)`** — custom pulse: `table` 0–2, `op` 0 = slower, 1 = normal, 2 = faster, `arg` 1–255 for op 0/2.
+- `**setLEDBrightness(_ value: UInt8)**` — static brightness 0–255 (0 = off).
+- `**setLEDPulseAsleep(_ on: Bool)**` / `**setLEDPulseAwake(_ on: Bool)**` — turn the built‑in pulse when “asleep” or “awake” on or off.
+- `**setLEDPulseMode(table:op:arg:)**` — custom pulse: `table` 0–2, `op` 0 = slower, 1 = normal, 2 = faster, `arg` 1–255 for op 0/2.
 
 LED commands use USB vendor control requests (same protocol as the Linux driver). They return `true` if the command was sent successfully. If the USB device is busy (e.g. another process has it open), LED calls may fail.
 
@@ -150,8 +146,8 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 
 ## If the device doesn’t respond
 
-1. **Unplug and replug** the PowerMate, then run your app again.  
-2. **Quit other software** that might be using the PowerMate (e.g. old PowerMate apps).  
+1. **Unplug and replug** the PowerMate, then run your app again.
+2. **Quit other software** that might be using the PowerMate (e.g. old PowerMate apps).
 3. The driver uses `kIOHIDOptionsTypeSeizeDevice` so it takes exclusive access; only one process can use it at a time.
 
 ## Requirements
@@ -166,11 +162,15 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 - Apple IOKit HID: `IOHIDManager`, `IOHIDDeviceOpen`, `IOHIDDeviceRegisterInputReportCallback`
 
 ### Versions
+
 #### 1.0.2
-Added LED VU meter (tracks system audio amplitude via `AudioHardwareCreateProcessTap`), Fn-key mode flip, long-press toggle for audio/scroll mode, and Audio Capture permission handling. Updated app identifier string.
+
+Added LED VU meter (tracks system audio amplitude via `AudioHardwareCreateProcessTap`), Fn-key mode flip, long-press toggle for audio/scroll mode, Audio Capture permission handling, blue menu bar icon when audio mode is active, and custom sound file support. Updated app identifier string.
 
 #### 1.0.1
+
 Added audio controls (volume + mute), settings persistence, and accessibility permission check. Also made scrolling smoother.
 
 #### 1.0.0
+
 Initial release. Includes scrolling and clicking, with optional double-click or right-click for long presses.
