@@ -4,20 +4,22 @@ This small driver enables the Griffin PowerMate, a nifty little device from days
 
 When it was released, it was intended to assist video and audio production by adding a scrollable knob to your desktop. Of course, modern controllers exist that offer many more literal bells and whistles, but there is something... quaint... about this early device.
 
-To install, download the latest release from the [releases tab](https://github.com/jameslockman/Griffin-PowerMate-Driver/releases). Download and open the DMG, and then drag **PowerMate Agent** to your Applications folder. Then, launch **PowerMate Agent**.  Of course, it won't do anything without a PowerMate, so go dig around in your junk USB drawer and dust it off! You will see a new item in your top menu to control the behavior of the PowerMate.
+To install, download the latest release from the [releases tab](https://github.com/jameslockman/Griffin-PowerMate-Driver/releases). Download and open the DMG, and then drag **PowerMate Agent** to your Applications folder. Then, launch **PowerMate Agent**.  Of course, it won't do anything without a PowerMate, so go dig around in your junk USB drawer and dust it off! You will see a new item in your top menu to control the behavior of the PowerMate. If you want it to launch when you start your Mac, add it to your startup items.
 
 <img width="479" height="153" alt="Where to find PowerMate Agent" src="https://github.com/user-attachments/assets/623bdfa6-8c20-4f3a-8ca6-82d33fadadff" />
 
 
 The PowerMate acts as a scroll control, so if the active window or control has a scroll option, turning the dial will scroll the window or increase/decrease selected value. You can reverse the scroll direction if you don't like the default scroll direction.
 
-The PowerMate also acts as a mouse button. A momentary push of the button acts as a mouse click. A long-press of the button acts as a right-click. You can also change the behavior so that a long-press acts as a double-click.
+The PowerMate can also act as a mouse button. A momentary push of the button acts as a mouse click when in scroll mode. A long-press of the button acts as a right-click. You can also change the behavior so that a long-press acts as a double-click or switches between scroll and audio mode.
 
-**Audio controls**: Enable "Default to audio controls" in the menu and the knob adjusts system volume while the button toggles mute. Holding the **Fn key** temporarily flips the current mode — if audio controls are off, Fn switches to audio; if audio controls are on, Fn switches back to scrolling. This lets you quickly switch between modes without touching the menu.
+**Audio controls**: Enable "Audio mode" in the menu and the knob adjusts system volume while the button toggles mute. When audio controls are active, the LED brightens and dims in sync with the amplitude of whatever is playing through your speakers. Holding the **Fn key** temporarily flips the current mode — if audio controls are off, Fn switches to audio; if audio controls are on, Fn switches back to scrolling. This lets you quickly switch between modes without touching the menu.
+
+**Long press** can also be configured to toggle between scroll and audio mode directly — useful if you switch often and prefer not to use the Fn key.
 
 All configuration choices (scroll direction, audio controls, long-press action) are saved automatically and restored the next time the app launches.
 
-On first launch, PowerMate Agent will prompt you to grant **Accessibility** permission if it hasn't been granted yet. PowerMate Agent uses the accesibility framework to interact with scrollable items and menus.
+On first launch, PowerMate Agent will prompt you to grant **Accessibility** permission. When you first enable audio controls, it will also prompt for **Audio Capture** permission. Both are required for full functionality.
 
 <img width="271" height="361" alt="Accessibility controls warning" src="https://github.com/user-attachments/assets/25ea63ea-03ee-450f-a72b-5159e43034a0" />
 
@@ -51,15 +53,17 @@ With the PowerMate plugged in, turn the knob or press the button; the demo print
 
 - **Rotation** → vertical scroll, or **Up/Down arrow keys** when a menu (or submenu) is focused, or **system volume** in audio control mode.
 - **Click** (short press) → **left mouse button** (at cursor), or **Return** when a menu is focused (chooses the highlighted item), or **mute/unmute** in audio control mode.
-- **Long press** → **right mouse button** (configurable to double-click) and activates menu mode.
+- **Long press** → **right mouse button**, or configurable to double-click or **toggle audio/scroll mode**.
 
 **Menu detection** uses the Accessibility API: when the focused UI element is a menu or submenu, rotation sends arrow keys and click sends Return. A long-press also enters a fallback “menu mode” (arrow keys until click or 5-second timeout) if Accessibility is not enabled.
 
-**Audio control mode** — enable “Default to audio controls” in the menu, or hold **Fn** to temporarily switch. Fn always flips the current mode: Fn + audio-off = audio on; Fn + audio-on = scroll.
+**Audio control mode** — enable “Audio mode” in the menu, or hold **Fn** to temporarily switch. Fn always flips the current mode: Fn + audio-off = audio on; Fn + audio-on = scroll. Long press can also be set to toggle mode.
+
+**LED VU meter** — when audio control mode is active, the LED brightness tracks the RMS amplitude of the system audio output in real time using `AudioHardwareCreateProcessTap`.
 
 **Persistent settings** — scroll direction, audio mode, and long-press action are remembered across launches.
 
-The LED throbs while you turn and goes dim when idle; full on while the button is held.
+The LED throbs while you turn and goes dim when idle; full brightness while the button is held.
 
 ```bash
 swift run PowerMateAgent
@@ -69,7 +73,7 @@ On first run, macOS will prompt for **Input Monitoring** permission. Grant it in
 
 To run in the background: `swift run PowerMateAgent &` or run the built binary `./.build/debug/PowerMateAgent` and add it to **Login Items** if you want it to start when you log in.
 
-To create a **signed, notarized app** (or installer) so others can use it without security warnings, see **[DISTRIBUTION.md](DISTRIBUTION.md)**. You’ll need an Apple Developer account; users will still need to grant Input Monitoring (or Accessibility) once when they first use the dial.
+To create a **signed, notarized app** (or installer) so others can use it without security warnings, see **[DISTRIBUTION.md](DISTRIBUTION.md)**. You’ll need an Apple Developer account; users will need to grant **Input Monitoring**, **Accessibility**, and (if using audio controls) **Audio Capture** once on first use.
 
 ## Use in your app
 
@@ -156,8 +160,11 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 - Apple IOKit HID: `IOHIDManager`, `IOHIDDeviceOpen`, `IOHIDDeviceRegisterInputReportCallback`
 
 ### Versions
+#### 1.0.2
+Added LED VU meter (tracks system audio amplitude via `AudioHardwareCreateProcessTap`), Fn-key mode flip, long-press toggle for audio/scroll mode, and Audio Capture permission handling. Updated app identifier string.
+
 #### 1.0.1
-Added Audio controls, settings persistence and accessibility permissions check. Also made the scrolling function smoother.
+Added audio controls (volume + mute), settings persistence, and accessibility permission check. Also made scrolling smoother.
 
 #### 1.0.0
 Initial release. Includes scrolling and clicking, with optional double-click or right-click for long presses.

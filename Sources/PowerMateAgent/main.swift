@@ -18,6 +18,7 @@ import Foundation
 import AppKit
 import CoreGraphics
 import ApplicationServices
+import CoreAudio
 import PowerMateDriver
 
 let driver = PowerMateDriver()
@@ -237,24 +238,140 @@ driver.onClick = {
     }
 }
 
-// Long-press action: right-click or double-click (chosen in menu)
-enum LongPressAction { case rightClick, doubleClick }
+// Long-press action: right-click, double-click, or toggle audio mode (chosen in menu)
+enum LongPressAction { case rightClick, doubleClick, toggleAudioMode }
 var longPressAction: LongPressAction = {
-    defaults.string(forKey: kLongPressAction) == "doubleClick" ? .doubleClick : .rightClick
+    switch defaults.string(forKey: kLongPressAction) {
+    case "doubleClick":      return .doubleClick
+    case "toggleAudioMode":  return .toggleAudioMode
+    default:                 return .rightClick
+    }
 }()
 
 driver.onLongPress = {
-    enterMenuMode()
     switch longPressAction {
     case .rightClick:
+        enterMenuMode()
         postMouseClick(button: .right)
     case .doubleClick:
+        enterMenuMode()
         DispatchQueue.main.async {
             let cocoa = NSEvent.mouseLocation
             let location = cocoaToQuartz(cocoa)
             postDoubleClick(at: location)
         }
+    case .toggleAudioMode:
+        DispatchQueue.main.async {
+            audioControlEnabled.toggle()
+            defaults.set(audioControlEnabled, forKey: kAudioControl)
+            if audioControlEnabled {
+                if #available(macOS 14.2, *) { startAudioMeter() }
+            } else {
+                stopAudioMeter()
+            }
+            menuHandler.updateMenuState()
+        }
     }
+}
+
+// Audio amplitude metering — drives the LED as a VU meter when audio control mode is on.
+// Uses CATapDescription (macOS 14.2+) to tap the system stereo output mix without requiring
+// Screen Recording permission. Only active when audioControlEnabled (not just Fn-held).
+// Audio amplitude metering — drives the LED as a VU meter when audio control mode is on.
+// Uses CATapDescription + AudioHardwareCreateProcessTap (macOS 14.2+) to tap the system
+// stereo output mix via a direct CoreAudio IOProc. No AVAudioEngine, no extra permissions.
+private var audioMeterActive = false
+private var audioTapID: AudioObjectID = 0
+private var audioAggDeviceID: AudioDeviceID = 0
+private var audioTapProcID: AudioDeviceIOProcID?
+
+@available(macOS 14.2, *)
+func startAudioMeter() {
+    guard !audioMeterActive else { return }
+
+    // 1. Create the process tap (AudioTap object, NOT an AudioDevice).
+    let tapDesc = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
+    var tapID: AudioObjectID = 0
+    guard AudioHardwareCreateProcessTap(tapDesc, &tapID) == noErr else { return }
+
+    // 2. Retrieve the tap's UID string so we can reference it in the aggregate device.
+    var tapUID: Unmanaged<CFString>? = nil
+    var uidSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+    var uidAddr = AudioObjectPropertyAddress(
+        mSelector: kAudioTapPropertyUID,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    AudioObjectGetPropertyData(tapID, &uidAddr, 0, nil, &uidSize, &tapUID)
+    guard let tapUIDString = tapUID?.takeRetainedValue() as String? else {
+        AudioHardwareDestroyProcessTap(tapID)
+        return
+    }
+
+    // 3. Wrap the tap in a private aggregate device — that IS an AudioDevice and accepts IOProcs.
+    let composition: NSDictionary = [
+        kAudioAggregateDeviceNameKey:      "PowerMate Meter" as NSString,
+        kAudioAggregateDeviceUIDKey:       "com.powermate.agent.meter.\(UUID().uuidString)" as NSString,
+        kAudioAggregateDeviceIsPrivateKey: 1 as NSNumber,
+        kAudioAggregateDeviceTapListKey:   [[kAudioSubTapUIDKey: tapUIDString as NSString]] as NSArray,
+    ]
+    var aggDeviceID: AudioDeviceID = 0
+    guard AudioHardwareCreateAggregateDevice(composition, &aggDeviceID) == noErr else {
+        AudioHardwareDestroyProcessTap(tapID)
+        return
+    }
+
+    // 4. Register an IOProc on the aggregate device; tap audio arrives in inInputData.
+    var procID: AudioDeviceIOProcID?
+    guard AudioDeviceCreateIOProcIDWithBlock(&procID, aggDeviceID, nil, {
+        _, inInputData, _, _, _ in
+        guard audioMeterActive, !isButtonDown else { return }
+        let buf = inInputData.pointee.mBuffers
+        guard let raw = buf.mData else { return }
+        let samples = raw.assumingMemoryBound(to: Float32.self)
+        let count = Int(buf.mDataByteSize) / MemoryLayout<Float32>.size
+        guard count > 0 else { return }
+        var sum: Float32 = 0
+        for i in 0..<count { sum += samples[i] * samples[i] }
+        let rms = sqrtf(sum / Float32(count))
+        let brightness = UInt8(clamping: Int((rms * 1200).rounded()))
+        setLEDOffMain(max(20, brightness))
+    }) == noErr, let procID else {
+        AudioHardwareDestroyAggregateDevice(aggDeviceID)
+        AudioHardwareDestroyProcessTap(tapID)
+        return
+    }
+
+    guard AudioDeviceStart(aggDeviceID, procID) == noErr else {
+        AudioDeviceDestroyIOProcID(aggDeviceID, procID)
+        AudioHardwareDestroyAggregateDevice(aggDeviceID)
+        AudioHardwareDestroyProcessTap(tapID)
+        return
+    }
+
+    audioTapID = tapID
+    audioAggDeviceID = aggDeviceID
+    audioTapProcID = procID
+    audioMeterActive = true
+}
+
+func stopAudioMeter() {
+    guard audioMeterActive else { return }
+    audioMeterActive = false
+    if audioAggDeviceID != 0 {
+        if let procID = audioTapProcID {
+            AudioDeviceStop(audioAggDeviceID, procID)
+            AudioDeviceDestroyIOProcID(audioAggDeviceID, procID)
+            audioTapProcID = nil
+        }
+        AudioHardwareDestroyAggregateDevice(audioAggDeviceID)
+        audioAggDeviceID = 0
+    }
+    if audioTapID != 0 {
+        if #available(macOS 14.2, *) { AudioHardwareDestroyProcessTap(audioTapID) }
+        audioTapID = 0
+    }
+    if !isButtonDown { setLEDOffMain(80) }
 }
 
 // Optional: LED feedback (dim when idle, throb while turning, full on when button held).
@@ -276,7 +393,7 @@ let throbSmooth: Double = 0.22
 
 func startThrob() {
     lastRotationTime = CFAbsoluteTimeGetCurrent()
-    guard throbTimer == nil else { return }
+    guard throbTimer == nil, !audioMeterActive else { return }
     throbTimer = DispatchSource.makeTimerSource(queue: .main)
     throbTimer?.schedule(deadline: .now(), repeating: throbTick)
     throbTimer?.setEventHandler {
@@ -317,6 +434,10 @@ DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
     if driver.isConnected {
         setLEDOffMain(80)
     }
+    // Restore audio meter if audio mode was saved as enabled from a previous session.
+    if audioControlEnabled {
+        if #available(macOS 14.2, *) { startAudioMeter() }
+    }
 }
 
 // Menu bar: status item and menu with Reverse scroll / Long press options
@@ -328,12 +449,14 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     var audioControlItem: NSMenuItem!
     var longPressRightItem: NSMenuItem!
     var longPressDoubleItem: NSMenuItem!
+    var longPressToggleAudioItem: NSMenuItem!
 
     func updateMenuState() {
         reverseScrollItem.state = scrollReversed ? .on : .off
         audioControlItem.state = audioControlEnabled ? .on : .off
         longPressRightItem.state = (longPressAction == .rightClick) ? .on : .off
         longPressDoubleItem.state = (longPressAction == .doubleClick) ? .on : .off
+        longPressToggleAudioItem.state = (longPressAction == .toggleAudioMode) ? .on : .off
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -349,6 +472,11 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     @objc func toggleAudioControl() {
         audioControlEnabled.toggle()
         defaults.set(audioControlEnabled, forKey: kAudioControl)
+        if audioControlEnabled {
+            if #available(macOS 14.2, *) { startAudioMeter() }
+        } else {
+            stopAudioMeter()
+        }
         updateMenuState()
     }
 
@@ -361,6 +489,12 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     @objc func setLongPressDoubleClick() {
         longPressAction = .doubleClick
         defaults.set("doubleClick", forKey: kLongPressAction)
+        updateMenuState()
+    }
+
+    @objc func setLongPressToggleAudio() {
+        longPressAction = .toggleAudioMode
+        defaults.set("toggleAudioMode", forKey: kLongPressAction)
         updateMenuState()
     }
 }
@@ -393,6 +527,10 @@ let longPressDoubleItem = NSMenuItem(title: "Double-click", action: #selector(Me
 longPressDoubleItem.target = menuHandler
 menuHandler.longPressDoubleItem = longPressDoubleItem
 longPressMenu.addItem(longPressDoubleItem)
+let longPressToggleAudioItem = NSMenuItem(title: "Toggle audio/scroll mode", action: #selector(MenuHandler.setLongPressToggleAudio), keyEquivalent: "")
+longPressToggleAudioItem.target = menuHandler
+menuHandler.longPressToggleAudioItem = longPressToggleAudioItem
+longPressMenu.addItem(longPressToggleAudioItem)
 
 let longPressSub = NSMenuItem(title: "Long press", action: nil, keyEquivalent: "")
 longPressSub.submenu = longPressMenu
@@ -405,9 +543,13 @@ menu.addItem(quitItem)
 statusItem.menu = menu
 menuHandler.updateMenuState()
 
-/// Check Accessibility permission; if missing, show a one-time alert directing the user to grant it.
+/// Check Accessibility permission; if missing, trigger the system prompt (which registers the
+/// app in Security > Accessibility) and show an alert with further instructions.
 func checkAccessibilityPermission() {
-    guard !AXIsProcessTrusted() else { return }
+    // Passing kAXTrustedCheckOptionPrompt:true causes macOS to show the system dialog and
+    // add the app to the Security > Accessibility list, even if the user dismisses it.
+    let prompt = [(kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String): true] as CFDictionary
+    guard !AXIsProcessTrustedWithOptions(prompt) else { return }
     let alert = NSAlert()
     alert.messageText = "Accessibility Permission Required"
     alert.informativeText = "PowerMate Agent needs Accessibility access to detect menus and send keyboard events.\n\nGo to System Settings → Privacy & Security → Accessibility and enable PowerMate Agent."
