@@ -6,7 +6,7 @@ When it was released, it was intended to assist video and audio production by ad
 
 To install, download the latest release from the [releases tab](https://github.com/jameslockman/Griffin-PowerMate-Driver/releases). Download and open the DMG, and then drag **PowerMate Agent** to your Applications folder. Then, launch **PowerMate Agent**.  Of course, it won't do anything without a PowerMate, so go dig around in your junk USB drawer and dust it off! You will see a new item in your top menu to control the behavior of the PowerMate. If you want it to launch when you start your Mac, add it to your startup items.
 
-<img width="479" height="153" alt="Where to find PowerMate Agent" src="https://github.com/user-attachments/assets/623bdfa6-8c20-4f3a-8ca6-82d33fadadff" />
+<img width="539" height="167" alt="Where to find PowerMate Agent" src="https://github.com/user-attachments/assets/18f4948b-f56c-4dc6-9695-40cee90f4855" />
 
 
 The PowerMate acts as a scroll control, so if the active window or control has a scroll option, turning the dial will scroll the window or increase/decrease selected value. You can reverse the scroll direction if you don't like the default scroll direction.
@@ -21,7 +21,13 @@ All configuration choices (scroll direction, audio controls, long-press action) 
 
 On first launch, PowerMate Agent will prompt you to grant **Accessibility** permission. When you first enable audio controls, it will also prompt for **Audio Capture** permission. Both are required for full functionality.
 
-<img width="271" height="361" alt="Accessibility controls warning" src="https://github.com/user-attachments/assets/25ea63ea-03ee-450f-a72b-5159e43034a0" />
+<img width="924" height="490" alt="Security check" src="https://github.com/user-attachments/assets/50349512-219e-4048-b876-4b648aeb48a6" />
+
+
+<img width="724" height="575" alt="Enable Accessibility permissions" src="https://github.com/user-attachments/assets/cabfe3b0-cab5-4a6f-b6b1-de9a80f86e7b" />
+
+
+<img width="728" height="575" alt="Enable Audio Permissions" src="https://github.com/user-attachments/assets/67ae80f9-0f77-47f4-ad69-0a37b02ae4e3" />
 
 
 Pretty simple, eh?
