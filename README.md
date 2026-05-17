@@ -169,6 +169,10 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 
 ### Versions
 
+#### 1.0.4
+
+Menu bar icon now indicates when there is no PowerMate connected.
+
 #### 1.0.3
 
 Added audio cue for when mode changes.
