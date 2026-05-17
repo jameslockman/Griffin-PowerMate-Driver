@@ -57,6 +57,11 @@ public final class PowerMateDriver {
     /// Called with every raw report from the device (6 bytes). Use for debugging or custom parsing.
     public var onRawReport: (([UInt8]) -> Void)?
 
+    /// Called on the main thread when the device is connected and ready.
+    public var onConnect: (() -> Void)?
+    /// Called on the main thread when the device is disconnected.
+    public var onDisconnect: (() -> Void)?
+
     private var manager: IOHIDManager?
     private var device: IOHIDDevice?
     private var reportBuffer: UnsafeMutablePointer<UInt8>?
@@ -214,6 +219,7 @@ public final class PowerMateDriver {
 
         DispatchQueue.main.async { [weak self] in
             self?.isConnected = true
+            self?.onConnect?()
         }
     }
 
@@ -234,6 +240,7 @@ public final class PowerMateDriver {
         deviceLocationID = nil
         DispatchQueue.main.async { [weak self] in
             self?.isConnected = false
+            self?.onDisconnect?()
         }
     }
 

@@ -473,6 +473,9 @@ driver.onButtonUp = {
     }
 }
 
+driver.onConnect = { updateStatusIcon() }
+driver.onDisconnect = { updateStatusIcon() }
+
 driver.start()
 
 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -550,14 +553,22 @@ final class MenuHandler: NSObject, NSMenuDelegate {
 func updateStatusIcon() {
     guard let button = statusItem.button else { return }
     button.contentTintColor = nil
-    if audioControlEnabled {
-        // Palette: primary layer (outer ring) adaptive, secondary layer (inner dot) blue.
+    if !driver.isConnected {
+        // Disconnected: dimmed circle (no fill) to indicate nothing is connected.
+        let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
+        let img = NSImage(systemSymbolName: "circle", accessibilityDescription: "PowerMate Agent — Not connected")?
+            .withSymbolConfiguration(config)
+        img?.isTemplate = false
+        button.image = img
+    } else if audioControlEnabled {
+        // Audio mode: blue inner dot.
         let config = NSImage.SymbolConfiguration(paletteColors: [.labelColor, .systemBlue])
-        let img = NSImage(systemSymbolName: "circle.inset.filled", accessibilityDescription: "PowerMate Agent")?
+        let img = NSImage(systemSymbolName: "circle.inset.filled", accessibilityDescription: "PowerMate Agent — Audio mode")?
             .withSymbolConfiguration(config)
         img?.isTemplate = false
         button.image = img
     } else {
+        // Scroll mode: standard adaptive template icon.
         let img = NSImage(systemSymbolName: "circle.inset.filled", accessibilityDescription: "PowerMate Agent")
         img?.isTemplate = true
         button.image = img
