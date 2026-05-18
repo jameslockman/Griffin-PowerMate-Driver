@@ -473,8 +473,8 @@ driver.onButtonUp = {
     }
 }
 
-driver.onConnect = { updateStatusIcon() }
-driver.onDisconnect = { updateStatusIcon() }
+driver.onConnect = { updateStatusIcon(); updateDockIcon() }
+driver.onDisconnect = { updateStatusIcon(); updateDockIcon() }
 
 driver.start()
 
@@ -488,9 +488,35 @@ DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
     }
 }
 
+// MARK: - App delegate (Dock icon fallback when status item is hidden by notch/overflow)
+
+class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Hide the dock icon as early as possible. Without LSUIElement in Info.plist, macOS would
+    /// show a dock icon by default; calling setActivationPolicy here suppresses it before the
+    /// launch sequence completes. The dock icon is shown dynamically when the status item is
+    /// hidden behind the camera notch.
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
+    }
+
+    /// Right-click (or click-and-hold) on the Dock icon shows the same menu as the menu bar.
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        return menu
+    }
+
+    /// Left-click on the Dock icon also pops the menu at the cursor.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        let location = NSEvent.mouseLocation
+        menu.popUp(positioning: nil, at: location, in: nil)
+        return false
+    }
+}
+
+let appDelegate = AppDelegate()
+
 // Menu bar: status item and menu with Reverse scroll / Long press options
 let app = NSApplication.shared
-app.setActivationPolicy(.accessory)
+app.delegate = appDelegate
 
 final class MenuHandler: NSObject, NSMenuDelegate {
     var reverseScrollItem: NSMenuItem!
@@ -506,6 +532,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         longPressDoubleItem.state = (longPressAction == .doubleClick) ? .on : .off
         longPressToggleAudioItem.state = (longPressAction == .toggleAudioMode) ? .on : .off
         updateStatusIcon()
+        updateDockIcon()
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -547,6 +574,50 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         longPressAction = .toggleAudioMode
         defaults.set("toggleAudioMode", forKey: kLongPressAction)
         updateMenuState()
+    }
+}
+
+/// Load a named icon from the bundle using the documented path(forResource:ofType:) API.
+/// Checks .icns first (preferred for dock display), then .png.
+private func loadBundleIcon(_ name: String) -> NSImage? {
+    for ext in ["icns", "png"] {
+        if let path = Bundle.main.path(forResource: name, ofType: ext),
+           let img = NSImage(contentsOfFile: path) {
+            return img
+        }
+    }
+    return nil
+}
+
+/// Returns the dock icon image for the current connection/mode state.
+/// Uses custom bundle images when available, otherwise falls back to SF Symbols.
+func makeDockIcon() -> NSImage? {
+    if !driver.isConnected {
+        if let img = loadBundleIcon("DockIconDisconnected") { return img }
+        let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
+            .applying(NSImage.SymbolConfiguration(pointSize: 96, weight: .regular))
+        return NSImage(systemSymbolName: "circle", accessibilityDescription: nil)?
+            .withSymbolConfiguration(config)
+    } else if audioControlEnabled {
+        if let img = loadBundleIcon("DockIconAudio") { return img }
+        let config = NSImage.SymbolConfiguration(paletteColors: [.labelColor, .systemBlue])
+            .applying(NSImage.SymbolConfiguration(pointSize: 96, weight: .regular))
+        return NSImage(systemSymbolName: "circle.inset.filled", accessibilityDescription: nil)?
+            .withSymbolConfiguration(config)
+    } else {
+        if let img = loadBundleIcon("DockIconScroll") { return img }
+        let config = NSImage.SymbolConfiguration(paletteColors: [.labelColor, .tertiaryLabelColor])
+            .applying(NSImage.SymbolConfiguration(pointSize: 96, weight: .regular))
+        return NSImage(systemSymbolName: "circle.inset.filled", accessibilityDescription: nil)?
+            .withSymbolConfiguration(config)
+    }
+}
+
+func updateDockIcon() {
+    guard dockIconVisible else { return }
+    if let img = makeDockIcon() {
+        NSApp.applicationIconImage = img
+        NSApp.dockTile.display()
     }
 }
 
@@ -643,5 +714,66 @@ DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
     checkAccessibilityPermission()
 }
 
-app.activate(ignoringOtherApps: true)
+// Periodically check whether the status item is visible in the menu bar.
+// If it is hidden (notch overlap or overflow >>) show a Dock icon so the user
+// can still access the menu. Check starts after a short delay to let the
+// status item settle into its position on launch.
+/// Returns true if the status item's window is positioned behind the camera notch.
+/// safeAreaInsets.top > 0 confirms a notch is present; the horizontal notch extent
+/// is estimated as ±6% of screen width from center (covers all current MacBook Pro models).
+func isStatusItemBehindNotch() -> Bool {
+    guard #available(macOS 12.0, *),
+          let window = statusItem.button?.window,
+          window.isVisible else { return false }
+
+    let itemFrame = window.frame
+    let screen = NSScreen.screens.first(where: { $0.frame.intersects(itemFrame) }) ?? NSScreen.main
+    guard let screen else { return false }
+
+    let insets = screen.safeAreaInsets
+    guard insets.top > 0 else { return false }  // no notch on this screen
+
+    let sf = screen.frame
+
+    // Confirm item is in the top menu-bar strip.
+    let inMenuBarStrip = itemFrame.maxY >= sf.maxY - insets.top
+
+    // The notch occupies the horizontal center of the screen. safeAreaInsets gives
+    // us the notch height but not its width. On all current MacBook Pro models the
+    // notch is roughly 12% of screen width total, so ±6% from center.
+    let notchHalfWidth = sf.width * 0.06
+
+    // Use the inner edge (the edge of the item closest to screen center) so that
+    // partial overlap is detected correctly.
+    let innerEdgeX = itemFrame.midX > sf.midX ? itemFrame.minX : itemFrame.maxX
+    let distanceFromCenter = abs(innerEdgeX - sf.midX)
+    let behindNotch = inMenuBarStrip && distanceFromCenter < notchHalfWidth
+
+    return behindNotch
+}
+
+var dockIconVisible = false
+func updateDockIconVisibility() {
+    let shouldShowDock = isStatusItemBehindNotch()
+    guard shouldShowDock != dockIconVisible else { return }
+    dockIconVisible = shouldShowDock
+    if shouldShowDock {
+        // Set image before and after the policy change; setActivationPolicy may
+        // briefly reset applicationIconImage to the bundle default.
+        NSApp.applicationIconImage = makeDockIcon()
+        app.setActivationPolicy(.regular)
+        app.activate(ignoringOtherApps: false)
+        DispatchQueue.main.async { updateDockIcon() }
+    } else {
+        app.setActivationPolicy(.accessory)
+        NSApp.applicationIconImage = nil  // restore default when hidden
+    }
+}
+DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+    updateDockIconVisibility()
+    Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+        updateDockIconVisibility()
+    }
+}
+
 app.run()

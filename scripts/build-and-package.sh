@@ -46,6 +46,9 @@ APP_SPECIFIC_PASSWORD="${vals[3]}"
 echo "Building app bundle..."
 ./scripts/build-app.sh
 
+echo "Stripping extended attributes before signing..."
+xattr -cr "$RELEASE_DIR/${APP_NAME}.app"
+
 echo "Signing with Developer ID (runtime + entitlements)..."
 codesign --force --deep --sign "$DEVELOPER_ID_CERT" \
   --options runtime \

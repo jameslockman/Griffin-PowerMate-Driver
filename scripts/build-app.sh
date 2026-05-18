@@ -45,9 +45,13 @@ if [ -f "scripts/AppIcon.icns" ]; then
   /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$APP_DIR/Contents/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile AppIcon" "$APP_DIR/Contents/Info.plist"
   echo "Added app icon from scripts/AppIcon.icns"
 fi
-if [ -d "scripts/Sounds" ] && [ "$(ls -A scripts/Sounds 2>/dev/null)" ]; then
+if [ -d "scripts/Sounds" ] && [ "$(ls scripts/Sounds 2>/dev/null)" ]; then
   cp scripts/Sounds/* "$APP_DIR/Contents/Resources/"
   echo "Copied custom sounds from scripts/Sounds/"
+fi
+if [ -d "scripts/Icons" ] && ls scripts/Icons/*.icns &>/dev/null; then
+  cp scripts/Icons/*.icns "$APP_DIR/Contents/Resources/"
+  echo "Copied custom icons from scripts/Icons/"
 fi
 
 echo "Created $APP_DIR (universal binary)"

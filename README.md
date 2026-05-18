@@ -22,6 +22,8 @@ Holding the **Fn key** temporarily flips the current mode — if audio is off, F
 | ![Scroll Mode active menu icon](/images/scrollMode.png) | Scroll Mode active |
 | ![Audio Mode active menu icon](/images/audioMode.png) | Audio Mode active |
 
+**Notch-aware Dock icon**: On MacBooks with a camera notch, the menu bar icon can be pushed behind the camera housing when many items are present. PowerMate Agent detects this automatically and shows a Dock icon so you can still access the menu. The Dock icon reflects the same three states (not connected, scroll mode, audio mode) as the menu bar icon. It disappears from the Dock when the menu bar icon is visible again.
+
 All configuration choices (scroll direction, audio controls, long-press action) are saved automatically and restored the next time the app launches.
 
 On first launch, PowerMate Agent will prompt you to grant **Accessibility** permission. When you first enable audio controls, it will also prompt for **Audio Capture** permission. Both are required for full functionality.
@@ -33,6 +35,31 @@ On first launch, PowerMate Agent will prompt you to grant **Accessibility** perm
 ![Audio Permissions](/images/audioPermissions.png)
 
 Pretty simple, eh?
+
+## Customization
+
+### Custom sound cues
+
+Mode-change sounds can be replaced with your own audio files. Place them in `scripts/Sounds/` before building:
+
+| File | Played when |
+|---|---|
+| `ToAudio.aiff` | Switching into audio mode |
+| `ToScroll.aiff` | Switching back to scroll mode |
+
+AIFF or WAV are recommended. If a file is absent the built-in system sound is used instead.
+
+### Custom Dock icons
+
+When the Dock icon is visible (notch fallback), you can supply your own icons. Place ICNS files in `scripts/Icons/` before building:
+
+| File | Shown when |
+|---|---|
+| `DockIconScroll.icns` | Connected, scroll mode |
+| `DockIconAudio.icns` | Connected, audio mode |
+| `DockIconDisconnected.icns` | No device connected |
+
+1024×1024 source PNGs can be converted to ICNS with `sips` and `iconutil` (both included with macOS). If a file is absent the SF Symbol fallback is used for that state.
 
 ## Technical details if you want to fork this repo and build your own.
 
@@ -168,6 +195,10 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 - Apple IOKit HID: `IOHIDManager`, `IOHIDDeviceOpen`, `IOHIDDeviceRegisterInputReportCallback`
 
 ### Versions
+
+#### 1.0.5
+
+Added notch-aware Dock icon fallback: when the menu bar icon is hidden behind the camera housing, a Dock icon appears automatically and reflects the current state (not connected, scroll mode, audio mode). Uses custom ICNS files for all three Dock icon states.
 
 #### 1.0.4
 
