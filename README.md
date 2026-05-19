@@ -197,6 +197,10 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 
 ### Versions
 
+#### 1.0.6
+
+PowerMate no longer prevents device sleep.
+
 #### 1.0.5
 
 Added notch-aware Dock icon fallback: when the menu bar icon is hidden behind the camera housing, a Dock icon appears automatically and reflects the current state (not connected, scroll mode, audio mode). Uses custom ICNS files for all three Dock icon states.

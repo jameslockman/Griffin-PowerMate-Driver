@@ -473,7 +473,11 @@ driver.onButtonUp = {
     }
 }
 
-driver.onConnect = { updateStatusIcon(); updateDockIcon() }
+driver.onConnect = {
+    updateStatusIcon()
+    updateDockIcon()
+    setLEDOffMain(80)
+}
 driver.onDisconnect = { updateStatusIcon(); updateDockIcon() }
 
 driver.start()
@@ -712,6 +716,23 @@ func checkAccessibilityPermission() {
 
 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
     checkAccessibilityPermission()
+}
+
+// Fully release the HID device and stop the audio IOProc when the display sleeps.
+// Holding the device open while the display is off causes the PowerMate to assert
+// USB remote wake repeatedly, toggling the display on and off every few seconds.
+// driver.start() re-seizes the device on wake; onConnect restores the LED.
+let wsCenter = NSWorkspace.shared.notificationCenter
+wsCenter.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { _ in
+    stopAudioMeter()
+    setLEDOffMain(0)
+    driver.stop()
+}
+wsCenter.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { _ in
+    driver.start()
+    if audioControlEnabled {
+        if #available(macOS 14.2, *) { startAudioMeter() }
+    }
 }
 
 // Periodically check whether the status item is visible in the menu bar.
