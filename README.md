@@ -16,11 +16,12 @@ The PowerMate can also act as a mouse button. A momentary push of the button act
 
 Holding the **Fn key** temporarily flips the current mode — if audio is off, Fn switches to audio; if audio is on, Fn switches back to scrolling. **Long press** can also be configured to toggle between modes directly, which is handy if you switch often and prefer not to use the Fn key.
 
-| **Menu icon** | **What it means** |
-|------------|---------|
-| ![No PowerMate Connected menu icon](/images/noPowermate.png) | No PowerMate connected to the computer. |
-| ![Scroll Mode active menu icon](/images/scrollMode.png) | Scroll Mode active |
-| ![Audio Mode active menu icon](/images/audioMode.png) | Audio Mode active |
+| **Menu icon** | **Dock Icon** | **What it means** |
+|------------|---------|---------|
+| ![No PowerMate Connected menu icon](/images/noPowermate.png) | <img src="/../main/images/DockIconDisconnected.png" alt="Device Unavailable" width="100"/> | No PowerMate connected to the computer. |
+| ![Scroll Mode active menu icon](/images/scrollMode.png) | <img src="/../main/images/DockIconScroll.png" alt="Scroll Mode" width="100"/> | Scroll Mode active |
+| ![Audio Mode active menu icon](/images/audioMode.png) | <img src="/../main/images/DockIconAudio.png" alt="Audio Mode" width="100"/> | Audio Mode active |
+
 
 **Notch-aware Dock icon**: On MacBooks with a camera notch, the menu bar icon can be pushed behind the camera housing when many items are present. PowerMate Agent detects this automatically and shows a Dock icon so you can still access the menu. The Dock icon reflects the same three states (not connected, scroll mode, audio mode) as the menu bar icon. It disappears from the Dock when the menu bar icon is visible again.
 
