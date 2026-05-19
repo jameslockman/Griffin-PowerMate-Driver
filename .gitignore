@@ -3,3 +3,6 @@
 
 # Secrets (never commit)
 secrets.json
+
+# Cursor config
+.cursor/
