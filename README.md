@@ -197,6 +197,12 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 
 ### Versions
 
+#### 1.0.7
+
+Fixed cursor drift when turning the knob — the HID manager now seizes the device at the manager level so macOS no longer stays attached and moves the cursor. Thanks to [Matt Hocker](https://github.com/matthocker) for identifying the root cause and providing the fix.
+
+Fixed display wake cycle on sleep: the driver now fully releases the PowerMate when the display sleeps, preventing the device from triggering USB remote wake and causing the screen to turn back on moments later.
+
 #### 1.0.6
 
 PowerMate no longer prevents device sleep.

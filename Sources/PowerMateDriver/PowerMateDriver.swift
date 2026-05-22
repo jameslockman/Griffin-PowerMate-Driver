@@ -150,7 +150,11 @@ public final class PowerMateDriver {
             driver.deviceRemoved(device)
         }, selfPtr)
 
-        if IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone)) != kIOReturnSuccess {
+        // Open the manager with seize so it propagates to every matched device.
+        // Without this, IOHIDManagerOpen opens devices non-seized first, making the
+        // later per-device IOHIDDeviceOpen(kIOHIDOptionsTypeSeizeDevice) a no-op —
+        // leaving macOS HID attached and causing the knob to also move the cursor.
+        if IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeSeizeDevice)) != kIOReturnSuccess {
             NSLog("PowerMateDriver: IOHIDManagerOpen failed (device may be in use)")
             return
         }
