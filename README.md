@@ -14,6 +14,11 @@ The PowerMate can also act as a mouse button. A momentary push of the button act
 
 **Run script mode**: Select "Run script" under Long press in the menu, then open **Configure Scripts...** to enter up to two shell commands. A regular long press runs the first command; holding Shift while long-pressing runs the second. Any command that works in Terminal works here — `open`, `osascript`, custom scripts, etc. This makes it easy to trigger two frequently-used actions (launching apps, running automations, controlling other tools) without any extra hardware.
 
+
+<img width="350"  alt="Script execution mode" src="/images/scriptMode.png" />
+
+<img width="350"  alt="Script execution mode" src="/images/configureScripts.png" />
+
 **Audio mode**: Enable "Audio mode" in the menu and the knob adjusts system volume while the button toggles mute. When audio mode is active, the LED brightens and dims in sync with the amplitude of whatever is playing through your speakers. A short sound cue confirms the switch — up when entering audio mode, and down when returning to scroll. The menu bar icon's ring turns blue while audio mode is active so you can tell at a glance which mode you're in.
 
 Holding the **Fn key** temporarily flips the current mode — if audio is off, Fn switches to audio; if audio is on, Fn switches back to scrolling. **Long press** can also be configured to toggle between modes directly, which is handy if you switch often and prefer not to use the Fn key.
