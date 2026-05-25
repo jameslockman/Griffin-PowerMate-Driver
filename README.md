@@ -10,7 +10,9 @@ To install, download the latest release from the [releases tab](https://github.c
 
 The PowerMate acts as a scroll control, so if the active window or control has a scroll option, turning the dial will scroll the window or increase/decrease selected value. You can reverse the scroll direction if you don't like the default scroll direction.
 
-The PowerMate can also act as a mouse button. A momentary push of the button acts as a mouse click when in scroll mode. A long-press of the button acts as a right-click. You can also change the behavior so that a long-press acts as a double-click or switches between scroll and audio mode.
+The PowerMate can also act as a mouse button. A momentary push of the button acts as a mouse click when in scroll mode. A long-press of the button acts as a right-click. You can also change the behavior so that a long-press acts as a double-click, switches between scroll and audio mode, or runs a shell command.
+
+**Run script mode**: Select "Run script" under Long press in the menu, then open **Configure Scripts...** to enter up to two shell commands. A regular long press runs the first command; holding Shift while long-pressing runs the second. Any command that works in Terminal works here — `open`, `osascript`, custom scripts, etc. This makes it easy to trigger two frequently-used actions (launching apps, running automations, controlling other tools) without any extra hardware.
 
 **Audio mode**: Enable "Audio mode" in the menu and the knob adjusts system volume while the button toggles mute. When audio mode is active, the LED brightens and dims in sync with the amplitude of whatever is playing through your speakers. A short sound cue confirms the switch — up when entering audio mode, and down when returning to scroll. The menu bar icon's ring turns blue while audio mode is active so you can tell at a glance which mode you're in.
 
@@ -196,6 +198,10 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 - Apple IOKit HID: `IOHIDManager`, `IOHIDDeviceOpen`, `IOHIDDeviceRegisterInputReportCallback`
 
 ### Versions
+
+#### 1.0.9
+
+Added script execution mode: configure up to two shell commands via **Configure Scripts...** in the menu, then set Long press to "Run script". Long press runs the first command; Shift + long press runs the second.
 
 #### 1.0.8
 

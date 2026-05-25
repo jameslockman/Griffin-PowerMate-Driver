@@ -33,6 +33,8 @@ private let defaults = UserDefaults.standard
 private let kScrollReversed    = "scrollReversed"
 private let kAudioControl      = "audioControlEnabled"
 private let kLongPressAction   = "longPressAction"
+private let kScript1           = "script1"
+private let kScript2           = "script2"
 
 var scrollReversed     = defaults.bool(forKey: kScrollReversed)
 var audioControlEnabled = defaults.bool(forKey: kAudioControl)
@@ -291,15 +293,64 @@ driver.onClick = {
     }
 }
 
-// Long-press action: right-click, double-click, or toggle audio mode (chosen in menu)
-enum LongPressAction { case rightClick, doubleClick, toggleAudioMode }
+// Long-press action: right-click, double-click, toggle audio mode, or run a script (chosen in menu)
+enum LongPressAction { case rightClick, doubleClick, toggleAudioMode, runScript }
 var longPressAction: LongPressAction = {
     switch defaults.string(forKey: kLongPressAction) {
     case "doubleClick":      return .doubleClick
     case "toggleAudioMode":  return .toggleAudioMode
+    case "runScript":        return .runScript
     default:                 return .rightClick
     }
 }()
+
+/// Run a shell command in the background via /bin/sh -c.
+func runScript(_ command: String) {
+    let trimmed = command.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return }
+    DispatchQueue.global(qos: .userInitiated).async {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", trimmed]
+        try? process.run()
+    }
+}
+
+/// Show the Configure Scripts sheet with two text fields.
+/// Long press runs script 1; shift + long press runs script 2.
+func showConfigureScripts() {
+    let alert = NSAlert()
+    alert.messageText = "Configure Scripts"
+    alert.informativeText = "Enter shell commands to run on long press.\nHold Shift while pressing to run the second command."
+    alert.addButton(withTitle: "Save")
+    alert.addButton(withTitle: "Cancel")
+
+    let container = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 84))
+
+    let label1 = NSTextField(labelWithString: "Long press:")
+    label1.frame = NSRect(x: 0, y: 60, width: 420, height: 17)
+    let field1 = NSTextField(frame: NSRect(x: 0, y: 36, width: 420, height: 22))
+    field1.placeholderString = "e.g.  open -a Safari"
+    field1.stringValue = defaults.string(forKey: kScript1) ?? ""
+
+    let label2 = NSTextField(labelWithString: "Shift + long press:")
+    label2.frame = NSRect(x: 0, y: 14, width: 420, height: 17)
+    let field2 = NSTextField(frame: NSRect(x: 0, y: -10, width: 420, height: 22))
+    field2.placeholderString = "e.g.  open -a Terminal"
+    field2.stringValue = defaults.string(forKey: kScript2) ?? ""
+
+    container.addSubview(label1)
+    container.addSubview(field1)
+    container.addSubview(label2)
+    container.addSubview(field2)
+    alert.accessoryView = container
+
+    NSApp.activate(ignoringOtherApps: true)
+    if alert.runModal() == .alertFirstButtonReturn {
+        defaults.set(field1.stringValue, forKey: kScript1)
+        defaults.set(field2.stringValue, forKey: kScript2)
+    }
+}
 
 driver.onLongPress = {
     switch longPressAction {
@@ -326,6 +377,11 @@ driver.onLongPress = {
             signalModeChange(toAudio: audioControlEnabled)
             menuHandler.updateMenuState()
         }
+    case .runScript:
+        let command = NSEvent.modifierFlags.contains(.shift)
+            ? defaults.string(forKey: kScript2) ?? ""
+            : defaults.string(forKey: kScript1) ?? ""
+        runScript(command)
     }
 }
 
@@ -520,6 +576,8 @@ DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
     if audioControlEnabled {
         if #available(macOS 14.2, *) { startAudioMeter() }
     }
+    // Check for a newer release in the background; shows a menu item if one is found.
+    checkForUpdates()
 }
 
 // MARK: - App delegate (Dock icon fallback when status item is hidden by notch/overflow)
@@ -558,6 +616,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     var longPressRightItem: NSMenuItem!
     var longPressDoubleItem: NSMenuItem!
     var longPressToggleAudioItem: NSMenuItem!
+    var longPressRunScriptItem: NSMenuItem!
 
     func updateMenuState() {
         reverseScrollItem.state = scrollReversed ? .on : .off
@@ -565,6 +624,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         longPressRightItem.state = (longPressAction == .rightClick) ? .on : .off
         longPressDoubleItem.state = (longPressAction == .doubleClick) ? .on : .off
         longPressToggleAudioItem.state = (longPressAction == .toggleAudioMode) ? .on : .off
+        longPressRunScriptItem.state = (longPressAction == .runScript) ? .on : .off
         updateStatusIcon()
         updateDockIcon()
     }
@@ -609,6 +669,57 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         defaults.set("toggleAudioMode", forKey: kLongPressAction)
         updateMenuState()
     }
+
+    @objc func setLongPressRunScript() {
+        longPressAction = .runScript
+        defaults.set("runScript", forKey: kLongPressAction)
+        updateMenuState()
+    }
+
+    @objc func configureScripts() {
+        showConfigureScripts()
+    }
+
+    @objc func openReleasesPage() {
+        if let url = URL(string: "https://github.com/jameslockman/Griffin-PowerMate-Driver/releases") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+}
+
+// MARK: - Update check
+
+private let kCurrentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+
+/// Returns true if `version` is strictly newer than `current` (semantic comparison).
+private func isNewerVersion(_ version: String, than current: String) -> Bool {
+    let a = version.split(separator: ".").compactMap { Int($0) }
+    let b = current.split(separator: ".").compactMap { Int($0) }
+    for i in 0..<max(a.count, b.count) {
+        let av = i < a.count ? a[i] : 0
+        let bv = i < b.count ? b[i] : 0
+        if av > bv { return true }
+        if av < bv { return false }
+    }
+    return false
+}
+
+/// Fetch the latest GitHub release tag and show the update menu item if a newer version exists.
+func checkForUpdates() {
+    guard let url = URL(string: "https://api.github.com/repos/jameslockman/Griffin-PowerMate-Driver/releases/latest") else { return }
+    var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
+    request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+    URLSession.shared.dataTask(with: request) { data, _, _ in
+        guard let data,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tagName = json["tag_name"] as? String else { return }
+        let latest = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
+        guard isNewerVersion(latest, than: kCurrentVersion) else { return }
+        DispatchQueue.main.async {
+            updateAvailableItem.title = "Update available: \(latest) →"
+            updateAvailableItem.isHidden = false
+        }
+    }.resume()
 }
 
 /// Load a named icon from the bundle using the documented path(forResource:ofType:) API.
@@ -712,10 +823,23 @@ let longPressToggleAudioItem = NSMenuItem(title: "Toggle audio/scroll mode", act
 longPressToggleAudioItem.target = menuHandler
 menuHandler.longPressToggleAudioItem = longPressToggleAudioItem
 longPressMenu.addItem(longPressToggleAudioItem)
+let longPressRunScriptItem = NSMenuItem(title: "Run script", action: #selector(MenuHandler.setLongPressRunScript), keyEquivalent: "")
+longPressRunScriptItem.target = menuHandler
+menuHandler.longPressRunScriptItem = longPressRunScriptItem
+longPressMenu.addItem(longPressRunScriptItem)
 
 let longPressSub = NSMenuItem(title: "Long press", action: nil, keyEquivalent: "")
 longPressSub.submenu = longPressMenu
 menu.addItem(longPressSub)
+
+menu.addItem(NSMenuItem.separator())
+let configScriptsItem = NSMenuItem(title: "Configure Scripts...", action: #selector(MenuHandler.configureScripts), keyEquivalent: "")
+configScriptsItem.target = menuHandler
+menu.addItem(configScriptsItem)
+let updateAvailableItem = NSMenuItem(title: "Update available", action: #selector(MenuHandler.openReleasesPage), keyEquivalent: "")
+updateAvailableItem.target = menuHandler
+updateAvailableItem.isHidden = true
+menu.addItem(updateAvailableItem)
 
 menu.addItem(NSMenuItem.separator())
 let quitItem = NSMenuItem(title: "Quit PowerMate Agent", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
