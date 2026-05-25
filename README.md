@@ -197,6 +197,10 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 
 ### Versions
 
+#### 1.0.8
+
+Reduced CPU usage in audio VU meter mode. The LED is now updated at ~25 Hz instead of at the audio hardware rate (~86–170 Hz), and updates are skipped entirely when amplitude is steady. Accessibility API calls for menu detection are now cached, reducing IPC overhead during fast knob rotation.
+
 #### 1.0.7
 
 Fixed cursor drift when turning the knob — the HID manager now seizes the device at the manager level so macOS no longer stays attached and moves the cursor. Thanks to [Matt Hocker](https://github.com/matthocker) for identifying the root cause and providing the fix.

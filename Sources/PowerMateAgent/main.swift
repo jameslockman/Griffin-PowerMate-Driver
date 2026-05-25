@@ -113,13 +113,23 @@ var isMenuMode = false
 var menuModeTimeout: DispatchWorkItem?
 let menuModeTimeoutInterval: TimeInterval = 5.0
 
+// Cached system-wide AX element (reused; creating it per call is wasteful).
+private let axSystemWide = AXUIElementCreateSystemWide()
+// isMenuFocused result cache: AX IPC is expensive and the menu state rarely changes
+// between knob ticks. A 150 ms TTL caps IPC calls to ~7/sec even during fast spinning.
+private var cachedMenuFocused = false
+private var menuFocusCacheTime: CFAbsoluteTime = 0
+private let menuFocusCacheTTL: CFAbsoluteTime = 0.15
+
 /// Returns true if the currently focused UI element is a menu or menu item (or inside one, e.g. submenu).
 /// Requires Accessibility permission. Runs on main thread.
 func isMenuFocused() -> Bool {
     guard Thread.isMainThread else { return false }
-    let systemWide = AXUIElementCreateSystemWide()
+    let now = CFAbsoluteTimeGetCurrent()
+    if now - menuFocusCacheTime < menuFocusCacheTTL { return cachedMenuFocused }
+    menuFocusCacheTime = now
     var appRef: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedApplicationAttribute as CFString, &appRef) == .success,
+    guard AXUIElementCopyAttributeValue(axSystemWide, kAXFocusedApplicationAttribute as CFString, &appRef) == .success,
           let app = appRef, CFGetTypeID(app) == AXUIElementGetTypeID() else { return false }
     let appElement = (app as! AXUIElement)
     var focusRef: CFTypeRef?
@@ -132,7 +142,10 @@ func isMenuFocused() -> Bool {
         var roleRef: CFTypeRef?
         if AXUIElementCopyAttributeValue(el, kAXRoleAttribute as CFString, &roleRef) == .success,
            let role = roleRef as? String {
-            if role == "AXMenu" || role == "AXMenuItem" { return true }
+            if role == "AXMenu" || role == "AXMenuItem" {
+                cachedMenuFocused = true
+                return true
+            }
         }
         var parentRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(el, kAXParentAttribute as CFString, &parentRef) == .success,
@@ -140,6 +153,7 @@ func isMenuFocused() -> Bool {
         element = (parent as! AXUIElement)
         count += 1
     }
+    cachedMenuFocused = false
     return false
 }
 
@@ -235,49 +249,45 @@ func toggleMute() {
 }
 
 driver.onRotate = { delta, _ in
-    DispatchQueue.main.async {
-        lastRotationTime = CFAbsoluteTimeGetCurrent()
-        startThrob()
-        if useMenuBehavior() {
-            let arrowKey: CGKeyCode = delta > 0 ? kDownArrow : kUpArrow
-            for _ in 0 ..< abs(delta) {
-                postKey(arrowKey)
-            }
-            if isMenuMode {
-                menuModeTimeout?.cancel()
-                let work = DispatchWorkItem { isMenuMode = false }
-                menuModeTimeout = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + menuModeTimeoutInterval, execute: work)
-            }
-        } else if useAudioBehavior() {
-            volumeAccumulator += delta
-            let steps = volumeAccumulator / volumeTicksPerStep
-            if steps != 0 {
-                volumeAccumulator -= steps * volumeTicksPerStep
-                let keyType: Int32 = steps > 0 ? 0 : 1
-                for _ in 0..<abs(steps) {
-                    postMediaKey(keyType, keyDown: true)
-                    postMediaKey(keyType, keyDown: false)
-                }
-            }
-        } else {
-            postScroll(delta: delta)
+    lastRotationTime = CFAbsoluteTimeGetCurrent()
+    startThrob()
+    if useMenuBehavior() {
+        let arrowKey: CGKeyCode = delta > 0 ? kDownArrow : kUpArrow
+        for _ in 0 ..< abs(delta) {
+            postKey(arrowKey)
         }
+        if isMenuMode {
+            menuModeTimeout?.cancel()
+            let work = DispatchWorkItem { isMenuMode = false }
+            menuModeTimeout = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + menuModeTimeoutInterval, execute: work)
+        }
+    } else if useAudioBehavior() {
+        volumeAccumulator += delta
+        let steps = volumeAccumulator / volumeTicksPerStep
+        if steps != 0 {
+            volumeAccumulator -= steps * volumeTicksPerStep
+            let keyType: Int32 = steps > 0 ? 0 : 1
+            for _ in 0..<abs(steps) {
+                postMediaKey(keyType, keyDown: true)
+                postMediaKey(keyType, keyDown: false)
+            }
+        }
+    } else {
+        postScroll(delta: delta)
     }
 }
 
 driver.onClick = {
-    DispatchQueue.main.async {
-        if useMenuBehavior() {
-            postKey(kReturnKey)
-            // Do not exit menu mode here: a submenu may open and we need to keep sending arrow keys.
-            // Menu mode will exit on the 5-second timeout when the user stops rotating.
-        } else if useAudioBehavior() {
-            toggleMute()
-        } else {
-            exitMenuMode()
-            postMouseClick(button: .left)
-        }
+    if useMenuBehavior() {
+        postKey(kReturnKey)
+        // Do not exit menu mode here: a submenu may open and we need to keep sending arrow keys.
+        // Menu mode will exit on the 5-second timeout when the user stops rotating.
+    } else if useAudioBehavior() {
+        toggleMute()
+    } else {
+        exitMenuMode()
+        postMouseClick(button: .left)
     }
 }
 
@@ -329,6 +339,18 @@ private var audioMeterActive = false
 private var audioTapID: AudioObjectID = 0
 private var audioAggDeviceID: AudioDeviceID = 0
 private var audioTapProcID: AudioDeviceIOProcID?
+// LED update throttle for the audio VU meter.
+// The IOProc fires at the hardware buffer rate (~86–172 Hz) but the LED only needs
+// to update at ~25 Hz for a smooth-looking VU effect. The RMS calculation and LED
+// dispatch are both skipped entirely on calls that arrive before the interval elapses,
+// so the float sample loop doesn't run on those callbacks at all.
+// kLEDUpdateInterval: minimum seconds between LED updates (0.04 = 25 Hz).
+// kLEDUpdateThreshold: minimum brightness change required to send a USB command,
+//   avoiding redundant writes when amplitude is steady.
+private var lastLEDBrightness: UInt8 = 0
+private var lastLEDUpdateTime: CFAbsoluteTime = 0
+private let kLEDUpdateInterval: CFAbsoluteTime = 0.04   // 25 Hz
+private let kLEDUpdateThreshold: Int = 4
 
 @available(macOS 14.2, *)
 func startAudioMeter() {
@@ -371,6 +393,10 @@ func startAudioMeter() {
     guard AudioDeviceCreateIOProcIDWithBlock(&procID, aggDeviceID, nil, {
         _, inInputData, _, _, _ in
         guard audioMeterActive, !isButtonDown else { return }
+        // Gate: skip the RMS calculation entirely until the update interval has elapsed.
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - lastLEDUpdateTime >= kLEDUpdateInterval else { return }
+        lastLEDUpdateTime = now
         let buf = inInputData.pointee.mBuffers
         guard let raw = buf.mData else { return }
         let samples = raw.assumingMemoryBound(to: Float32.self)
@@ -379,8 +405,10 @@ func startAudioMeter() {
         var sum: Float32 = 0
         for i in 0..<count { sum += samples[i] * samples[i] }
         let rms = sqrtf(sum / Float32(count))
-        let brightness = UInt8(clamping: Int((rms * 1200).rounded()))
-        setLEDOffMain(max(20, brightness))
+        let brightness = max(UInt8(20), UInt8(clamping: Int((rms * 1200).rounded())))
+        guard abs(Int(brightness) - Int(lastLEDBrightness)) > kLEDUpdateThreshold else { return }
+        lastLEDBrightness = brightness
+        setLEDOffMain(brightness)
     }) == noErr, let procID else {
         AudioHardwareDestroyAggregateDevice(aggDeviceID)
         AudioHardwareDestroyProcessTap(tapID)
@@ -403,6 +431,8 @@ func startAudioMeter() {
 func stopAudioMeter() {
     guard audioMeterActive else { return }
     audioMeterActive = false
+    lastLEDBrightness = 0
+    lastLEDUpdateTime = 0
     if audioAggDeviceID != 0 {
         if let procID = audioTapProcID {
             AudioDeviceStop(audioAggDeviceID, procID)
