@@ -55,20 +55,61 @@ codesign --force --deep --sign "$DEVELOPER_ID_CERT" \
   --entitlements "scripts/PowerMateAgent.entitlements" \
   "$RELEASE_DIR/${APP_NAME}.app"
 
-echo "Creating DMG (app + Applications alias, .DS_Store for large icon view)..."
-hdiutil detach "/Volumes/PowerMate Agent" 2>/dev/null || true
+echo "Creating DMG (app + Applications alias, background image via AppleScript)..."
+DMG_VOLNAME="PowerMate Agent"
+DMG_STAGING="$RELEASE_DIR/dmg-staging.dmg"
+hdiutil detach "/Volumes/${DMG_VOLNAME}" 2>/dev/null || true
 hdiutil detach "/Volumes/PowerMateAgent-${VERSION}" 2>/dev/null || true
+
+# Build a temporary read-write DMG from a flat folder.
 DMG_LAYOUT="$RELEASE_DIR/dmg-layout"
 rm -rf "$DMG_LAYOUT"
 mkdir -p "$DMG_LAYOUT"
 cp -R "$RELEASE_DIR/${APP_NAME}.app" "$DMG_LAYOUT/"
 ln -s /Applications "$DMG_LAYOUT/Applications"
-if [ -f "scripts/dmg.DS_Store" ]; then
-  cp "scripts/dmg.DS_Store" "$DMG_LAYOUT/.DS_Store"
+if [ -f "scripts/dmg-background.png" ]; then
+  mkdir -p "$DMG_LAYOUT/.background"
+  cp "scripts/dmg-background.png" "$DMG_LAYOUT/.background/background.png"
 fi
+
+rm -f "$DMG_STAGING"
+hdiutil create -volname "$DMG_VOLNAME" -srcfolder "$DMG_LAYOUT" -ov -format UDRW "$DMG_STAGING"
+rm -rf "$DMG_LAYOUT"
+hdiutil attach "$DMG_STAGING" -mountpoint "/Volumes/${DMG_VOLNAME}"
+
+# Use AppleScript to set window size, icon positions, and background image.
+# This is more reliable than a captured .DS_Store because it runs against the
+# live mounted volume and doesn't store stale alias paths.
+if [ -f "scripts/dmg-background.png" ]; then
+  osascript << APPLESCRIPT
+  tell application "Finder"
+    tell disk "${DMG_VOLNAME}"
+      open
+      set current view of container window to icon view
+      set toolbar visible of container window to false
+      set statusbar visible of container window to false
+      set the bounds of container window to {200, 120, 800, 560}
+      set viewOptions to the icon view options of container window
+      set arrangement of viewOptions to not arranged
+      set icon size of viewOptions to 128
+      set background picture of viewOptions to file ".background:background.png"
+      set position of item "${APP_NAME}.app" of container window to {130, 195}
+      set position of item "Applications" of container window to {495, 195}
+      close
+      open
+      update without registering applications
+      delay 3
+    end tell
+  end tell
+APPLESCRIPT
+fi
+
+hdiutil detach "/Volumes/${DMG_VOLNAME}"
+
+# Convert to compressed read-only DMG for distribution.
 cd "$RELEASE_DIR"
-hdiutil create -volname "PowerMateAgent-${VERSION}" -srcfolder "dmg-layout" -ov -format UDZO -imagekey zlib-level=9 "$DMG_NAME"
-rm -rf dmg-layout
+hdiutil convert "dmg-staging.dmg" -format UDZO -imagekey zlib-level=9 -ov -o "$DMG_NAME"
+rm -f "dmg-staging.dmg"
 cd ../..
 
 echo "Submitting for notarization..."
