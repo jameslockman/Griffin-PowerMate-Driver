@@ -21,13 +21,22 @@ The PowerMate can also act as a mouse button. A momentary push of the button act
 
 **Audio mode**: Enable "Audio mode" in the menu and the knob adjusts system volume while the button toggles mute. When audio mode is active, the LED brightens and dims in sync with the amplitude of whatever is playing through your speakers. A short sound cue confirms the switch — up when entering audio mode, and down when returning to scroll. The menu bar icon's ring turns blue while audio mode is active so you can tell at a glance which mode you're in.
 
-Holding the **Fn key** temporarily flips the current mode — if audio is off, Fn switches to audio; if audio is on, Fn switches back to scrolling. **Long press** can also be configured to toggle between modes directly, which is handy if you switch often and prefer not to use the Fn key.
+In audio mode you have two modifiers available on the knob:
+
+- **Shift + turn** — fine volume control. Each tick moves volume by a small, perceptually-consistent increment (roughly two turns per hardware step) rather than the full media-key step.
+- **Fn + turn** — temporarily flips the mode. If audio is off, Fn switches to audio; if audio is on, Fn switches back to scrolling.
+
+The **click action** in audio mode is configurable via *Click in audio mode* in the menu. Choose **Mute/unmute** or **Play/Pause** as your primary action. Holding **Shift** while clicking activates the alternate action — so you can reach both without changing the menu setting.
+
+The **VU Meter** (LED amplitude display) can be toggled independently of audio mode via its own menu item.
+
+**Long press** can also be configured to toggle between modes directly, which is handy if you switch often and prefer not to use the Fn key.
 
 | **Menu icon** | **Dock Icon** | **What it means** |
 |------------|---------|---------|
-| ![No PowerMate Connected menu icon](/images/noPowermate.png) | <img src="/../main/images/DockIconDisconnected.png" alt="Device Unavailable" width="100"/> | No PowerMate connected to the computer. |
-| ![Scroll Mode active menu icon](/images/scrollMode.png) | <img src="/../main/images/DockIconScroll.png" alt="Scroll Mode" width="100"/> | Scroll Mode active |
-| ![Audio Mode active menu icon](/images/audioMode.png) | <img src="/../main/images/DockIconAudio.png" alt="Audio Mode" width="100"/> | Audio Mode active |
+| ![No PowerMate Connected menu icon](/images/noPowermate.png) | <img src="/images/DockIconDisconnected.png" alt="Device Unavailable" width="100"/> | No PowerMate connected to the computer. |
+| ![Scroll Mode active menu icon](/images/scrollMode.png) | <img src="/images/DockIconScroll.png" alt="Scroll Mode" width="100"/> | Scroll Mode active |
+| ![Audio Mode active menu icon](/images/audioMode.png) | <img src="/images/DockIconAudio.png" alt="Audio Mode" width="100"/> | Audio Mode active |
 
 
 **Notch-aware Dock icon**: On MacBooks with a camera notch, the menu bar icon can be pushed behind the camera housing when many items are present. PowerMate Agent detects this automatically and shows a Dock icon so you can still access the menu. The Dock icon reflects the same three states (not connected, scroll mode, audio mode) as the menu bar icon. It disappears from the Dock when the menu bar icon is visible again.
@@ -94,9 +103,9 @@ With the PowerMate plugged in, turn the knob or press the button; the demo print
 
 **PowerMateAgent** turns the knob and button into keyboard/scroll events that **any application** receives (browser, editor, etc.):
 
-- **Rotation** → vertical scroll, or **Up/Down arrow keys** when a menu (or submenu) is focused, or **system volume** in audio control mode.
-- **Click** (short press) → **left mouse button** (at cursor), or **Return** when a menu is focused (chooses the highlighted item), or **mute/unmute** in audio control mode.
-- **Long press** → **right mouse button**, or configurable to double-click or **toggle audio/scroll mode**.
+- **Rotation** → vertical scroll, or **Up/Down arrow keys** when a menu (or submenu) is focused, or **system volume** in audio control mode. Hold **Shift** in audio mode for fine-grained volume control; hold **Fn** to temporarily flip modes.
+- **Click** (short press) → **left mouse button** (at cursor), or **Return** when a menu is focused (chooses the highlighted item), or **mute/unmute / play/pause** in audio control mode (configurable; Shift alternates between the two actions).
+- **Long press** → **right mouse button**, or configurable to double-click, **toggle audio/scroll mode**, or **run a shell script**.
 
 **Menu detection** uses the Accessibility API: when the focused UI element is a menu or submenu, rotation sends arrow keys and click sends Return. A long-press also enters a fallback “menu mode” (arrow keys until click or 5-second timeout) if Accessibility is not enabled.
 
@@ -204,9 +213,25 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 
 ### Versions
 
+#### 1.0.10
+
+**Fine volume control**: holding **Shift** while turning the knob in audio mode now adjusts volume in small, perceptually-consistent increments. The step size adapts across the volume range so it always takes approximately two turns per hardware step, regardless of the current volume level.
+
+**Play/Pause as a click action**: the click action in audio mode can now be set to **Play/Pause** (in addition to Mute/unmute) via the new *Click in audio mode* submenu. Holding **Shift** while clicking swaps to the alternate action — so if your primary action is Mute, Shift+click plays or pauses, and vice versa.
+
+**VU Meter toggle**: the LED VU meter can now be enabled or disabled independently of audio mode via a dedicated menu item.
+
+**Help dialog**: a **Help...** menu item summarises all controls and modifier combinations, with a clickable link for feedback and bug reports.
+
+**Menu reorganised**: the menu is now more compact — Audio mode → VU Meter → Click in audio mode → Reverse scroll direction → Long press → Configure Scripts → Help → Quit.
+
+**Configure Scripts improvements**: script fields are now multi-line, support paste and undo (Cmd+V / Cmd+Z), expand `~/` paths automatically, and show placeholder text when empty.
+
 #### 1.0.9
 
 Added script execution mode: configure up to two shell commands via **Configure Scripts...** in the menu, then set Long press to "Run script". Long press runs the first command; Shift + long press runs the second.
+
+Added release version check. If we detect a new version, then a menu will appear under **Configure Scripts...** to guide the user to the releases page for the latest version.
 
 #### 1.0.8
 

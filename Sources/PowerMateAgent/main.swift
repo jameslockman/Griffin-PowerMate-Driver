@@ -32,12 +32,16 @@ let scrollPixelsPerStep: Int32 = 20
 private let defaults = UserDefaults.standard
 private let kScrollReversed    = "scrollReversed"
 private let kAudioControl      = "audioControlEnabled"
+private let kClickAction       = "clickAction"
+private let kVUMeter           = "vuMeterEnabled"
 private let kLongPressAction   = "longPressAction"
 private let kScript1           = "script1"
 private let kScript2           = "script2"
 
-var scrollReversed     = defaults.bool(forKey: kScrollReversed)
+var scrollReversed      = defaults.bool(forKey: kScrollReversed)
 var audioControlEnabled = defaults.bool(forKey: kAudioControl)
+// VU meter defaults to true (on) for existing users; only false if explicitly disabled.
+var vuMeterEnabled      = defaults.object(forKey: kVUMeter) == nil ? true : defaults.bool(forKey: kVUMeter)
 
 func postScroll(delta: Int) {
     var pixels = Int32(delta) * scrollPixelsPerStep
@@ -250,6 +254,87 @@ func toggleMute() {
     postMediaKey(7, keyDown: false)
 }
 
+// Fine volume control in the dB domain — equal dB steps are perceptually equal regardless
+// of where you are on the volume curve (unlike equal scalar steps, which feel larger at
+// low volumes and smaller at loud ones).
+// Uses kAudioDevicePropertyVolumeDecibels ('vold') so we stay in logarithmic space.
+// Hardware still quantises writes; the accumulated target crosses step boundaries naturally.
+private let kVolumeDecibels = AudioObjectPropertySelector(0x766F6C64)  // 'vold'
+private var fineVolumeTarget: Float32 = .nan  // NaN = needs init from hardware
+
+func fineVolumeDevice() -> AudioDeviceID? {
+    var deviceID: AudioDeviceID = kAudioObjectUnknown
+    var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+    var hwAddr = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),
+                                     &hwAddr, 0, nil, &size, &deviceID) == noErr,
+          deviceID != kAudioObjectUnknown else { return nil }
+    return deviceID
+}
+
+func adjustVolumeFine(delta: Int) {
+    guard let deviceID = fineVolumeDevice() else { return }
+    var dbAddr = AudioObjectPropertyAddress(
+        mSelector: kVolumeDecibels,
+        mScope: kAudioDevicePropertyScopeOutput,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    var size = UInt32(MemoryLayout<Float32>.size)
+
+    // Initialise target from current hardware dB value on first call or after reset.
+    if fineVolumeTarget.isNaN {
+        var current: Float32 = 0
+        guard AudioObjectGetPropertyData(deviceID, &dbAddr, 0, nil, &size, &current) == noErr
+        else { return }
+        fineVolumeTarget = current
+    }
+
+    // Compute an adaptive dB step targeting ~2 knob ticks per hardware volume step.
+    // Hardware steps are uniform in scalar space (24 steps, Δscalar ≈ 1/24). The equivalent
+    // dB span at the current level is 20·log₁₀(1 + 1/(24·s)). Using half of that per tick
+    // means it always takes ~2 ticks to cross a hardware boundary across the full range.
+    // Scalar is estimated from the accumulated dB target (not re-read from hardware) and
+    // floored at 0.1 so the step size stays reasonable at very low volumes.
+    let estimatedScalar: Float = max(pow(10.0, fineVolumeTarget / 20.0), 0.1)
+    let localDbStep: Float = 20.0 * log10(1.0 + 1.0 / (24.0 * estimatedScalar))
+    let adaptiveStep: Float = localDbStep / 2.0
+
+    fineVolumeTarget += Float32(delta) * adaptiveStep
+
+    // Clamp to the device's reported dB range (typically around -70..0 dB).
+    var rangeAddr = AudioObjectPropertyAddress(
+        mSelector: kAudioDevicePropertyVolumeRangeDecibels,
+        mScope: kAudioDevicePropertyScopeOutput,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    var range = AudioValueRange(mMinimum: -70, mMaximum: 0)
+    var rangeSize = UInt32(MemoryLayout<AudioValueRange>.size)
+    AudioObjectGetPropertyData(deviceID, &rangeAddr, 0, nil, &rangeSize, &range)
+    fineVolumeTarget = max(Float32(range.mMinimum), min(Float32(range.mMaximum), fineVolumeTarget))
+
+    var vol = fineVolumeTarget
+    AudioObjectSetPropertyData(deviceID, &dbAddr, 0, nil, size, &vol)
+}
+
+// NX_KEYTYPE_PLAY = 16 — same system-wide play/pause as the Apple keyboard media key.
+func togglePlayPause() {
+    postMediaKey(16, keyDown: true)
+    postMediaKey(16, keyDown: false)
+}
+
+// Click action: what the button does in audio mode (menu behavior still takes priority).
+enum ClickAction { case mute, playPause }
+var clickAction: ClickAction = {
+    switch defaults.string(forKey: kClickAction) {
+    case "playPause": return .playPause
+    default:          return .mute
+    }
+}()
+
 driver.onRotate = { delta, _ in
     lastRotationTime = CFAbsoluteTimeGetCurrent()
     startThrob()
@@ -265,14 +350,19 @@ driver.onRotate = { delta, _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + menuModeTimeoutInterval, execute: work)
         }
     } else if useAudioBehavior() {
-        volumeAccumulator += delta
-        let steps = volumeAccumulator / volumeTicksPerStep
-        if steps != 0 {
-            volumeAccumulator -= steps * volumeTicksPerStep
-            let keyType: Int32 = steps > 0 ? 0 : 1
-            for _ in 0..<abs(steps) {
-                postMediaKey(keyType, keyDown: true)
-                postMediaKey(keyType, keyDown: false)
+        if NSEvent.modifierFlags.contains(.shift) {
+            adjustVolumeFine(delta: delta)
+        } else {
+            fineVolumeTarget = .nan  // re-sync target next time fine mode is entered
+            volumeAccumulator += delta
+            let steps = volumeAccumulator / volumeTicksPerStep
+            if steps != 0 {
+                volumeAccumulator -= steps * volumeTicksPerStep
+                let keyType: Int32 = steps > 0 ? 0 : 1
+                for _ in 0..<abs(steps) {
+                    postMediaKey(keyType, keyDown: true)
+                    postMediaKey(keyType, keyDown: false)
+                }
             }
         }
     } else {
@@ -286,7 +376,11 @@ driver.onClick = {
         // Do not exit menu mode here: a submenu may open and we need to keep sending arrow keys.
         // Menu mode will exit on the 5-second timeout when the user stops rotating.
     } else if useAudioBehavior() {
-        toggleMute()
+        let shiftHeld = NSEvent.modifierFlags.contains(.shift)
+        switch clickAction {
+        case .mute:      shiftHeld ? togglePlayPause() : toggleMute()
+        case .playPause: shiftHeld ? toggleMute()       : togglePlayPause()
+        }
     } else {
         exitMenuMode()
         postMouseClick(button: .left)
@@ -304,14 +398,65 @@ var longPressAction: LongPressAction = {
     }
 }()
 
+/// NSTextView subclass that fixes paste/copy/cut/selectAll inside NSAlert accessory views
+/// and adds placeholder text support (NSTextView has no public placeholderString API).
+private class EditableTextView: NSTextView {
+    var placeholderString: String?
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard string.isEmpty, let placeholder = placeholderString else { return }
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font ?? NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+            .foregroundColor: NSColor.placeholderTextColor,
+        ]
+        let inset = textContainerInset
+        let origin = CGPoint(x: inset.width + 5, y: inset.height)
+        placeholder.draw(at: origin, withAttributes: attrs)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.modifierFlags.contains(.command) else { return super.performKeyEquivalent(with: event) }
+        switch event.charactersIgnoringModifiers {
+        case "v": return NSApp.sendAction(#selector(NSText.paste(_:)),     to: nil, from: self)
+        case "c": return NSApp.sendAction(#selector(NSText.copy(_:)),      to: nil, from: self)
+        case "x": return NSApp.sendAction(#selector(NSText.cut(_:)),       to: nil, from: self)
+        case "a": return NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: self)
+        case "z": return NSApp.sendAction(Selector(("undo:")),             to: nil, from: self)
+        default:  return super.performKeyEquivalent(with: event)
+        }
+    }
+}
+
+/// NSTextField subclass that fixes paste/copy/cut/selectAll inside NSAlert accessory views.
+/// NSAlert intercepts Cmd+key events before they reach the field editor; overriding
+/// performKeyEquivalent routes them directly to the field editor's text view.
+private class EditableTextField: NSTextField {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.modifierFlags.contains(.command) else { return super.performKeyEquivalent(with: event) }
+        switch event.charactersIgnoringModifiers {
+        case "v": return NSApp.sendAction(#selector(NSText.paste(_:)),      to: nil, from: self)
+        case "c": return NSApp.sendAction(#selector(NSText.copy(_:)),       to: nil, from: self)
+        case "x": return NSApp.sendAction(#selector(NSText.cut(_:)),        to: nil, from: self)
+        case "a": return NSApp.sendAction(#selector(NSText.selectAll(_:)),  to: nil, from: self)
+        case "z": return NSApp.sendAction(Selector(("undo:")),              to: nil, from: self)
+        default:  return super.performKeyEquivalent(with: event)
+        }
+    }
+}
+
 /// Run a shell command in the background via /bin/sh -c.
+/// Leading ~/ and mid-command ~/ are expanded to the user's home directory so
+/// users can type ~/scripts/foo.sh instead of the full absolute path.
 func runScript(_ command: String) {
     let trimmed = command.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return }
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    let expanded = trimmed.replacingOccurrences(of: "~/", with: home + "/")
     DispatchQueue.global(qos: .userInitiated).async {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", trimmed]
+        process.arguments = ["-c", expanded]
         try? process.run()
     }
 }
@@ -320,35 +465,73 @@ func runScript(_ command: String) {
 /// Long press runs script 1; shift + long press runs script 2.
 func showConfigureScripts() {
     let alert = NSAlert()
-    alert.messageText = "Configure Scripts"
-    alert.informativeText = "Enter shell commands to run on long press.\nHold Shift while pressing to run the second command."
+    // Empty messageText so the app icon is centered (same style as the Help dialog).
+    alert.messageText = ""
+    alert.informativeText = ""
     alert.addButton(withTitle: "Save")
     alert.addButton(withTitle: "Cancel")
 
-    let container = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 84))
+    // Layout (AppKit: y=0 at bottom, increasing upward):
+    //  0–70   scroll2 (multi-line text view)
+    //  74–91  label2
+    //  98–168 scroll1 (multi-line text view)
+    //  172–189 label1
+    //  197–227 description
+    //  235–255 title
+    //  255–265 topPad to clear centered icon
+    let w: CGFloat      = 420
+    let tvH: CGFloat    = 70   // height of each script text view
+    let topPad: CGFloat = 0
 
-    let label1 = NSTextField(labelWithString: "Long press:")
-    label1.frame = NSRect(x: 0, y: 60, width: 420, height: 17)
-    let field1 = NSTextField(frame: NSRect(x: 0, y: 36, width: 420, height: 22))
-    field1.placeholderString = "e.g.  open -a Safari"
-    field1.stringValue = defaults.string(forKey: kScript1) ?? ""
+    // Helper: a bordered, scrollable NSTextView pre-filled with text.
+    func makeScriptView(text: String) -> NSScrollView {
+        let sv = NSScrollView(frame: .zero)
+        sv.borderType          = .bezelBorder
+        sv.hasVerticalScroller = true
+        sv.autohidesScrollers  = true
+        let tv = EditableTextView(frame: .zero)
+        tv.isEditable          = true
+        tv.isRichText          = false
+        tv.font                = NSFont.monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+        tv.string              = text
+        tv.placeholderString   = "Enter shell script here..."
+        sv.documentView        = tv
+        return sv
+    }
+
+    let scroll2 = makeScriptView(text: defaults.string(forKey: kScript2) ?? "")
+    scroll2.frame = NSRect(x: 0, y: 0, width: w, height: tvH)
 
     let label2 = NSTextField(labelWithString: "Shift + long press:")
-    label2.frame = NSRect(x: 0, y: 14, width: 420, height: 17)
-    let field2 = NSTextField(frame: NSRect(x: 0, y: -10, width: 420, height: 22))
-    field2.placeholderString = "e.g.  open -a Terminal"
-    field2.stringValue = defaults.string(forKey: kScript2) ?? ""
+    label2.frame = NSRect(x: 0, y: tvH + 4, width: w, height: 17)
 
-    container.addSubview(label1)
-    container.addSubview(field1)
-    container.addSubview(label2)
-    container.addSubview(field2)
+    let scroll1 = makeScriptView(text: defaults.string(forKey: kScript1) ?? "")
+    scroll1.frame = NSRect(x: 0, y: tvH + 28, width: w, height: tvH)
+
+    let label1 = NSTextField(labelWithString: "Long press:")
+    label1.frame = NSRect(x: 0, y: tvH * 2 + 32, width: w, height: 17)
+
+    let desc = NSTextField(wrappingLabelWithString: "Enter shell commands to run on long press. Each line is a separate command.\nHold Shift while pressing to run the second script.\nIf you leave the fields blank, no script will be run.")
+    desc.font      = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+    desc.textColor = .labelColor
+    desc.frame     = NSRect(x: 0, y: tvH * 2 + 57, width: w, height: 55)
+
+    let title = NSTextField(labelWithString: "Configure Scripts")
+    title.font      = NSFont.boldSystemFont(ofSize: NSFont.systemFontSize)
+    title.alignment = .center
+    title.frame     = NSRect(x: 0, y: tvH * 2 + 120, width: w, height: 20)
+
+    let totalH = tvH * 2 + 140 + topPad
+    let container = NSView(frame: NSRect(x: 0, y: 0, width: w, height: totalH))
+    for v in [title, desc, label1, scroll1, label2, scroll2] { container.addSubview(v) }
     alert.accessoryView = container
 
     NSApp.activate(ignoringOtherApps: true)
     if alert.runModal() == .alertFirstButtonReturn {
-        defaults.set(field1.stringValue, forKey: kScript1)
-        defaults.set(field2.stringValue, forKey: kScript2)
+        let tv1 = (scroll1.documentView as? NSTextView)?.string ?? ""
+        let tv2 = (scroll2.documentView as? NSTextView)?.string ?? ""
+        defaults.set(tv1, forKey: kScript1)
+        defaults.set(tv2, forKey: kScript2)
     }
 }
 
@@ -369,6 +552,7 @@ driver.onLongPress = {
             audioControlEnabled.toggle()
             defaults.set(audioControlEnabled, forKey: kAudioControl)
             volumeAccumulator = 0
+            fineVolumeTarget = .nan
             if audioControlEnabled {
                 if #available(macOS 14.2, *) { startAudioMeter() }
             } else {
@@ -410,7 +594,7 @@ private let kLEDUpdateThreshold: Int = 4
 
 @available(macOS 14.2, *)
 func startAudioMeter() {
-    guard !audioMeterActive else { return }
+    guard !audioMeterActive, vuMeterEnabled else { return }
 
     // 1. Create the process tap (AudioTap object, NOT an AudioDevice).
     let tapDesc = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
@@ -613,6 +797,9 @@ app.delegate = appDelegate
 final class MenuHandler: NSObject, NSMenuDelegate {
     var reverseScrollItem: NSMenuItem!
     var audioControlItem: NSMenuItem!
+    var clickMuteItem: NSMenuItem!
+    var clickPlayPauseItem: NSMenuItem!
+    var vuMeterItem: NSMenuItem!
     var longPressRightItem: NSMenuItem!
     var longPressDoubleItem: NSMenuItem!
     var longPressToggleAudioItem: NSMenuItem!
@@ -621,6 +808,9 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     func updateMenuState() {
         reverseScrollItem.state = scrollReversed ? .on : .off
         audioControlItem.state = audioControlEnabled ? .on : .off
+        clickMuteItem.state = (clickAction == .mute) ? .on : .off
+        clickPlayPauseItem.state = (clickAction == .playPause) ? .on : .off
+        vuMeterItem.state = vuMeterEnabled ? .on : .off
         longPressRightItem.state = (longPressAction == .rightClick) ? .on : .off
         longPressDoubleItem.state = (longPressAction == .doubleClick) ? .on : .off
         longPressToggleAudioItem.state = (longPressAction == .toggleAudioMode) ? .on : .off
@@ -643,12 +833,39 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         audioControlEnabled.toggle()
         defaults.set(audioControlEnabled, forKey: kAudioControl)
         volumeAccumulator = 0
+        fineVolumeTarget = .nan
         if audioControlEnabled {
             if #available(macOS 14.2, *) { startAudioMeter() }
         } else {
             stopAudioMeter()
         }
         signalModeChange(toAudio: audioControlEnabled)
+        updateMenuState()
+    }
+
+    @objc func setClickMute() {
+        clickAction = .mute
+        defaults.set("mute", forKey: kClickAction)
+        updateMenuState()
+    }
+
+    @objc func setClickPlayPause() {
+        clickAction = .playPause
+        defaults.set("playPause", forKey: kClickAction)
+        updateMenuState()
+    }
+
+    @objc func toggleVUMeter() {
+        vuMeterEnabled.toggle()
+        defaults.set(vuMeterEnabled, forKey: kVUMeter)
+        if audioControlEnabled {
+            if vuMeterEnabled {
+                if #available(macOS 14.2, *) { startAudioMeter() }
+            } else {
+                stopAudioMeter()
+                setLEDOffMain(80)
+            }
+        }
         updateMenuState()
     }
 
@@ -684,6 +901,82 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         if let url = URL(string: "https://github.com/jameslockman/Griffin-PowerMate-Driver/releases") {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    @objc func showHelp() {
+        // Each tuple: (bold prefix, plain suffix). Empty prefix = plain line.
+        let lines: [(String, String)] = [
+            ("", "PowerMate Agent runs in the background and turns the PowerMate into a scroll wheel or volume control.\n"),
+            ("Audio mode", " – Enable in the menu to use the PowerMate as a volume control. Otherwise it acts as a scroll wheel."),
+            ("VU Meter", " – Pulse the blue LED in time with your audio stream."),
+            ("Click in audio mode", " – Set the default action to Play/Pause or Mute/Unmute. Hold Shift to use the other action."),
+            ("Reverse scroll direction", " – Reverses the scroll direction in scroll mode."),
+            ("Long press", " – Right-click, double-click, toggle audio/scroll mode, or run a script.\n"),
+            ("Modifiers:", ""),
+            ("Fn + turn", " – Momentarily toggle between scroll and audio mode."),
+            ("Shift + turn (audio mode)", " – Fine volume control."),
+            ("Shift + click (audio mode)", " – Alternate between mute and play/pause.\n"),
+            ("Configure Scripts", " – Sets shell commands for long press (and Shift+long press).\n"),
+            ("Feedback/bug report", " - Let us know if you have any issues or suggestions."),
+        ]
+
+        let normalFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        let boldFont   = NSFont.boldSystemFont(ofSize: NSFont.smallSystemFontSize)
+        let result     = NSMutableAttributedString()
+
+        // Title line — centered, slightly larger bold, sits just below the icon.
+        let centeredStyle = NSMutableParagraphStyle()
+        centeredStyle.alignment = .center
+        centeredStyle.paragraphSpacing = 12
+        result.append(NSAttributedString(string: "PowerMate Agent\n", attributes: [
+            .font: NSFont.boldSystemFont(ofSize: NSFont.systemFontSize),
+            .paragraphStyle: centeredStyle,
+        ]))
+
+        for (bold, plain) in lines {
+            if !bold.isEmpty {
+                result.append(NSAttributedString(string: bold,
+                    attributes: [.font: boldFont]))
+            }
+            if !plain.isEmpty {
+                result.append(NSAttributedString(string: plain,
+                    attributes: [.font: normalFont]))
+            }
+            result.append(NSAttributedString(string: "\n",
+                attributes: [.font: normalFont]))
+        }
+
+        // Make "Feedback/bug report" a clickable link.
+        let full = result.string as NSString
+        let linkRange = full.range(of: "Feedback/bug report")
+        result.addAttribute(.link,
+            value: "https://github.com/jameslockman/Griffin-PowerMate-Driver/issues",
+            range: linkRange)
+
+        let alert = NSAlert()
+        alert.messageText = ""
+        alert.informativeText = ""
+        alert.addButton(withTitle: "OK")
+
+        // Wrap the text view in a container with top padding so the text
+        // clears the app icon that NSAlert draws at the top of the dialog.
+        let tvWidth: CGFloat  = 380
+        let tvHeight: CGFloat = 230
+        let topPad: CGFloat   = 95
+        alert.accessoryView = {
+            let container = NSView(frame: NSRect(x: 0, y: 0, width: tvWidth, height: tvHeight + topPad))
+            let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: tvWidth, height: tvHeight))
+            tv.textStorage?.setAttributedString(result)
+            tv.isEditable = false
+            tv.isSelectable = true
+            tv.drawsBackground = false
+            tv.textContainerInset = .zero
+            container.addSubview(tv)
+            return container
+        }()
+
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 }
 
@@ -805,6 +1098,25 @@ audioItem.target = menuHandler
 menuHandler.audioControlItem = audioItem
 menu.addItem(audioItem)
 
+let vuMeterItem = NSMenuItem(title: "VU Meter", action: #selector(MenuHandler.toggleVUMeter), keyEquivalent: "")
+vuMeterItem.target = menuHandler
+menuHandler.vuMeterItem = vuMeterItem
+menu.addItem(vuMeterItem)
+
+let clickMenu = NSMenu()
+let clickMuteItem = NSMenuItem(title: "Mute/unmute", action: #selector(MenuHandler.setClickMute), keyEquivalent: "")
+clickMuteItem.target = menuHandler
+menuHandler.clickMuteItem = clickMuteItem
+clickMenu.addItem(clickMuteItem)
+let clickPlayPauseItem = NSMenuItem(title: "Play/Pause", action: #selector(MenuHandler.setClickPlayPause), keyEquivalent: "")
+clickPlayPauseItem.target = menuHandler
+menuHandler.clickPlayPauseItem = clickPlayPauseItem
+clickMenu.addItem(clickPlayPauseItem)
+
+let clickSub = NSMenuItem(title: "Click in audio mode", action: nil, keyEquivalent: "")
+clickSub.submenu = clickMenu
+menu.addItem(clickSub)
+
 let reverseItem = NSMenuItem(title: "Reverse scroll direction", action: #selector(MenuHandler.toggleScrollReversed), keyEquivalent: "")
 reverseItem.target = menuHandler
 menuHandler.reverseScrollItem = reverseItem
@@ -842,6 +1154,12 @@ updateAvailableItem.isHidden = true
 menu.addItem(updateAvailableItem)
 
 menu.addItem(NSMenuItem.separator())
+let helpItem = NSMenuItem(title: "Help...", action: #selector(MenuHandler.showHelp), keyEquivalent: "")
+helpItem.target = menuHandler
+if let helpIcon = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: nil) {
+    helpItem.image = helpIcon
+}
+menu.addItem(helpItem)
 let quitItem = NSMenuItem(title: "Quit PowerMate Agent", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
 quitItem.target = app
 menu.addItem(quitItem)
