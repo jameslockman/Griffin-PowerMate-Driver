@@ -1,12 +1,30 @@
 # Griffin PowerMate driver for modern MacOS
 
+As seen on [Daring Fireball](https://daringfireball.net/linked/2026/05/14/new-driver-for-the-old-griffin-powermate)
+
 This small driver enables the Griffin PowerMate, a nifty little device from days gone by. What does the PowerMate do? It is a knob that you can twist or that you can press. That's it. It also has a blue LED in the base that can change intensity based on what you're doing.
 
 When it was released, it was intended to assist video and audio production by adding a scrollable knob to your desktop. Of course, modern controllers exist that offer many more literal bells and whistles, but there is something... quaint... about this early device.
 
+## Installation
 To install, download the latest release from the [releases tab](https://github.com/jameslockman/Griffin-PowerMate-Driver/releases). Download and open the DMG, and then drag **PowerMate Agent** to your Applications folder. Then, launch **PowerMate Agent**.  Of course, it won't do anything without a PowerMate, so go dig around in your junk USB drawer and dust it off! You will see a new item in your top menu to control the behavior of the PowerMate. If you want it to launch when you start your Mac, add it to your startup items.
 
+#### You can also install via Homebrew
+
+```bash
+brew tap jameslockman/tap
+brew install --cask griffin-powermate-driver
+```
+Uninstalling with Homebrew is just as easy
+```bash
+brew uninstall --cask griffin-powermate-driver
+```
+
+Once installed, PowerMate Agent will appear in your menu bar.
+
 ![Where to find PowerMate Agent](/images/menuBar.png)
+
+If the menu bar is hidden by the notch on a laptop display, then PowerMate Agent will appear in your dock.
 
 The PowerMate acts as a scroll control, so if the active window or control has a scroll option, turning the dial will scroll the window or increase/decrease selected value. You can reverse the scroll direction if you don't like the default scroll direction.
 
@@ -21,10 +39,11 @@ The PowerMate can also act as a mouse button. A momentary push of the button act
 
 **Audio mode**: Enable "Audio mode" in the menu and the knob adjusts system volume while the button toggles mute. When audio mode is active, the LED brightens and dims in sync with the amplitude of whatever is playing through your speakers. A short sound cue confirms the switch — up when entering audio mode, and down when returning to scroll. The menu bar icon's ring turns blue while audio mode is active so you can tell at a glance which mode you're in.
 
-In audio mode you have two modifiers available on the knob:
+In audio mode you have modifiers available on the knob:
 
-- **Shift + turn** — fine volume control. Each tick moves volume by a small, perceptually-consistent increment (roughly two turns per hardware step) rather than the full media-key step.
-- **Fn + turn** — temporarily flips the mode. If audio is off, Fn switches to audio; if audio is on, Fn switches back to scrolling.
+- **Shift + turn** — adjusts volume in quarter-step increments, similar to using shift-option-volume up/down. The On Screen Display will appear and you will get audio cues that the volume has changed.
+- **Shift + Option + turn** — adjusts volume in small, perceptually-consistent increments. The On Screen Display will NOT appear, and you will not get any audio cues that the volume has changed. Know that the volume will change in 1% increments across the full range of values.
+- **Fn + turn** — temporarily flips the mode. If audio mode is off, Fn switches to audio mode; if audio mode is on, Fn switches back to scroll mode.
 
 The **click action** in audio mode is configurable via *Click in audio mode* in the menu. Choose **Mute/unmute** or **Play/Pause** as your primary action. Holding **Shift** while clicking activates the alternate action — so you can reach both without changing the menu setting.
 
@@ -212,6 +231,12 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 - Apple IOKit HID: `IOHIDManager`, `IOHIDDeviceOpen`, `IOHIDDeviceRegisterInputReportCallback`
 
 ### Versions
+
+#### 1.0.11
+
+**Fine volume controls**: 
+- Holding **Shift** while turning the knob in audio mode now adjusts volume in quarter-step increments, similar to using shift-option-volume up/down. The On Screen Display will appear and you will get audio cues that the volume has changed.
+- Holding **Shift-Option** while turning the knob in audio mode now adjusts volume in small, perceptually-consistent increments. The On Screen Display will NOT appear, and you will not get any audio cues that the volume has changed. Know that the volume will change in 1% increments across the full range of values.
 
 #### 1.0.10
 

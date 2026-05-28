@@ -194,7 +194,7 @@ func useAudioBehavior() -> Bool {
 // Accumulator so the knob requires multiple ticks per volume step.
 // Raise volumeTicksPerStep to slow the rate of change; lower it to speed it up.
 private var volumeAccumulator = 0
-private let volumeTicksPerStep = 4
+private let volumeTicksPerStep = 2
 
 /// Load a sound by name, checking the app bundle Resources first, then falling back to system sounds.
 /// Place custom files named e.g. "ToAudio.aiff" / "ToScroll.aiff" in scripts/Sounds/ and they will
@@ -320,6 +320,37 @@ func adjustVolumeFine(delta: Int) {
     AudioObjectSetPropertyData(deviceID, &dbAddr, 0, nil, size, &vol)
 }
 
+// Quarter-step volume via NX systemDefined media key events with Shift+Option modifiers.
+// NX events (not CGEvent keyboard events) trigger the macOS volume OSD and go through
+// the same system handler as physical key presses. Including Shift+Option in the modifier
+// flags signals the handler to apply quarter-step behaviour (~1% per press).
+// Fires 2 events per knob tick so the full range takes ~32 ticks instead of ~64.
+// NX_KEYTYPE_SOUND_UP = 0, NX_KEYTYPE_SOUND_DOWN = 1
+func adjustVolumeQuarterStep(delta: Int) {
+    guard delta != 0 else { return }
+    let keyType: Int32 = delta > 0 ? 0 : 1
+    let shiftOption: UInt = NSEvent.ModifierFlags.shift.rawValue | NSEvent.ModifierFlags.option.rawValue
+    for _ in 0..<abs(delta) * 2 {
+        for keyDown in [true, false] {
+            let base: UInt = keyDown ? 0xa00 : 0xb00
+            let flags = NSEvent.ModifierFlags(rawValue: base | shiftOption)
+            let data1 = Int(keyType) << 16 | (keyDown ? 0x0a00 : 0x0b00)
+            guard let event = NSEvent.otherEvent(
+                with: .systemDefined,
+                location: .zero,
+                modifierFlags: flags,
+                timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: 0,
+                context: nil,
+                subtype: 8,
+                data1: data1,
+                data2: -1
+            ) else { continue }
+            event.cgEvent?.post(tap: .cghidEventTap)
+        }
+    }
+}
+
 // NX_KEYTYPE_PLAY = 16 — same system-wide play/pause as the Apple keyboard media key.
 func togglePlayPause() {
     postMediaKey(16, keyDown: true)
@@ -350,8 +381,11 @@ driver.onRotate = { delta, _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + menuModeTimeoutInterval, execute: work)
         }
     } else if useAudioBehavior() {
-        if NSEvent.modifierFlags.contains(.shift) {
-            adjustVolumeFine(delta: delta)
+        let mods = NSEvent.modifierFlags
+        if mods.contains(.shift) && mods.contains(.option) {
+            adjustVolumeFine(delta: delta)          // Option+Shift: adaptive dB ~1% increments
+        } else if mods.contains(.shift) {
+            adjustVolumeQuarterStep(delta: delta)   // Shift: Shift+Option+VolumeKey quarter steps
         } else {
             fineVolumeTarget = .nan  // re-sync target next time fine mode is entered
             volumeAccumulator += delta
@@ -914,7 +948,8 @@ final class MenuHandler: NSObject, NSMenuDelegate {
             ("Long press", " – Right-click, double-click, toggle audio/scroll mode, or run a script.\n"),
             ("Modifiers:", ""),
             ("Fn + turn", " – Momentarily toggle between scroll and audio mode."),
-            ("Shift + turn (audio mode)", " – Fine volume control."),
+            ("Shift + turn (audio mode)", " – Quarter-step volume control (like Control-Shift-VolumeUp/Down)."),
+            ("Option + Shift + turn (audio mode)", " – Fine volume control (~1% increments)."),
             ("Shift + click (audio mode)", " – Alternate between mute and play/pause.\n"),
             ("Configure Scripts", " – Sets shell commands for long press (and Shift+long press).\n"),
             ("Feedback/bug report", " - Let us know if you have any issues or suggestions."),
@@ -931,6 +966,14 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         result.append(NSAttributedString(string: "PowerMate Agent\n", attributes: [
             .font: NSFont.boldSystemFont(ofSize: NSFont.systemFontSize),
             .paragraphStyle: centeredStyle,
+        ]))
+        let versionStyle = NSMutableParagraphStyle()
+        versionStyle.alignment = .center
+        versionStyle.paragraphSpacing = 6
+        result.append(NSAttributedString(string: "Version \(kCurrentVersion)\n", attributes: [
+            .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+            .foregroundColor: NSColor.secondaryLabelColor,
+            .paragraphStyle: versionStyle,
         ]))
 
         for (bold, plain) in lines {
@@ -958,20 +1001,39 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         alert.informativeText = ""
         alert.addButton(withTitle: "OK")
 
-        // Wrap the text view in a container with top padding so the text
+        // Wrap the text view in a scrollable container with top padding so the text
         // clears the app icon that NSAlert draws at the top of the dialog.
-        let tvWidth: CGFloat  = 380
-        let tvHeight: CGFloat = 230
-        let topPad: CGFloat   = 95
+        // The NSTextView grows vertically to fit its content; the NSScrollView provides
+        // a scrollbar if the content exceeds the fixed window height (e.g. at large
+        // accessibility font sizes or if more lines are added in future).
+        let tvWidth: CGFloat  = 450
+        let tvHeight: CGFloat = 400
+        let topPad: CGFloat   = 0
         alert.accessoryView = {
             let container = NSView(frame: NSRect(x: 0, y: 0, width: tvWidth, height: tvHeight + topPad))
-            let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: tvWidth, height: tvHeight))
+
+            let sv = NSScrollView(frame: NSRect(x: 0, y: 0, width: tvWidth, height: tvHeight))
+            sv.hasVerticalScroller = true
+            sv.autohidesScrollers  = true
+            sv.borderType          = .noBorder
+            sv.drawsBackground     = false
+
+            let contentWidth = sv.contentSize.width
+            let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: contentWidth, height: tvHeight))
+            tv.minSize                              = NSSize(width: 0, height: tvHeight)
+            tv.maxSize                              = NSSize(width: contentWidth, height: .greatestFiniteMagnitude)
+            tv.isVerticallyResizable                = true
+            tv.isHorizontallyResizable              = false
+            tv.autoresizingMask                     = .width
+            tv.textContainer?.containerSize         = NSSize(width: contentWidth, height: .greatestFiniteMagnitude)
+            tv.textContainer?.widthTracksTextView   = true
             tv.textStorage?.setAttributedString(result)
-            tv.isEditable = false
-            tv.isSelectable = true
+            tv.isEditable      = false
+            tv.isSelectable    = true
             tv.drawsBackground = false
-            tv.textContainerInset = .zero
-            container.addSubview(tv)
+
+            sv.documentView = tv
+            container.addSubview(sv)
             return container
         }()
 
@@ -982,7 +1044,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
 
 // MARK: - Update check
 
-private let kCurrentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+private let kCurrentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.10"
 
 /// Returns true if `version` is strictly newer than `current` (semantic comparison).
 private func isNewerVersion(_ version: String, than current: String) -> Bool {
