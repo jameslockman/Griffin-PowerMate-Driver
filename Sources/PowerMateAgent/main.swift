@@ -261,6 +261,7 @@ func toggleMute() {
 // Hardware still quantises writes; the accumulated target crosses step boundaries naturally.
 private let kVolumeDecibels = AudioObjectPropertySelector(0x766F6C64)  // 'vold'
 private var fineVolumeTarget: Float32 = .nan  // NaN = needs init from hardware
+private var lastVolumeTier = -1               // -1 = uninitialised; 0=fine, 1=quarter, 2=standard
 
 func fineVolumeDevice() -> AudioDeviceID? {
     var deviceID: AudioDeviceID = kAudioObjectUnknown
@@ -366,7 +367,12 @@ var clickAction: ClickAction = {
     }
 }()
 
-driver.onRotate = { delta, _ in
+// Velocity thresholds (deltas per second) for automatic volume precision selection.
+// Below slowThreshold → fine (~1% steps); below fastThreshold → quarter-step; above → standard.
+private let volumeVelocitySlowThreshold: Double = 6
+private let volumeVelocityFastThreshold: Double = 15
+
+driver.onRotate = { delta, rate in
     lastRotationTime = CFAbsoluteTimeGetCurrent()
     startThrob()
     if useMenuBehavior() {
@@ -387,15 +393,31 @@ driver.onRotate = { delta, _ in
         } else if mods.contains(.shift) {
             adjustVolumeQuarterStep(delta: delta)   // Shift: Shift+Option+VolumeKey quarter steps
         } else {
-            fineVolumeTarget = .nan  // re-sync target next time fine mode is entered
-            volumeAccumulator += delta
-            let steps = volumeAccumulator / volumeTicksPerStep
-            if steps != 0 {
-                volumeAccumulator -= steps * volumeTicksPerStep
-                let keyType: Int32 = steps > 0 ? 0 : 1
-                for _ in 0..<abs(steps) {
-                    postMediaKey(keyType, keyDown: true)
-                    postMediaKey(keyType, keyDown: false)
+            // Velocity-based precision: slow → fine (~1%), medium → quarter-step, fast → standard.
+            // rate is nil on the very first report; treat as slow.
+            let r = rate ?? 0
+            let tier = r < volumeVelocitySlowThreshold ? 0 : r < volumeVelocityFastThreshold ? 1 : 2
+            if tier != lastVolumeTier {
+                // Reset both accumulators on any tier change so neither carries stale state
+                // into the new tier (avoids phantom steps and stale dB target jumps).
+                volumeAccumulator = 0
+                fineVolumeTarget = .nan
+                lastVolumeTier = tier
+            }
+            if tier == 0 {
+                adjustVolumeFine(delta: delta)
+            } else if tier == 1 {
+                adjustVolumeQuarterStep(delta: delta)
+            } else {
+                volumeAccumulator += delta
+                let steps = volumeAccumulator / volumeTicksPerStep
+                if steps != 0 {
+                    volumeAccumulator -= steps * volumeTicksPerStep
+                    let keyType: Int32 = steps > 0 ? 0 : 1
+                    for _ in 0..<abs(steps) {
+                        postMediaKey(keyType, keyDown: true)
+                        postMediaKey(keyType, keyDown: false)
+                    }
                 }
             }
         }
@@ -587,6 +609,7 @@ driver.onLongPress = {
             defaults.set(audioControlEnabled, forKey: kAudioControl)
             volumeAccumulator = 0
             fineVolumeTarget = .nan
+            lastVolumeTier = -1
             if audioControlEnabled {
                 if #available(macOS 14.2, *) { startAudioMeter() }
             } else {
@@ -868,6 +891,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         defaults.set(audioControlEnabled, forKey: kAudioControl)
         volumeAccumulator = 0
         fineVolumeTarget = .nan
+        lastVolumeTier = -1
         if audioControlEnabled {
             if #available(macOS 14.2, *) { startAudioMeter() }
         } else {
