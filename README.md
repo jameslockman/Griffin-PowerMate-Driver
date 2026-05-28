@@ -39,10 +39,16 @@ The PowerMate can also act as a mouse button. A momentary push of the button act
 
 **Audio mode**: Enable "Audio mode" in the menu and the knob adjusts system volume while the button toggles mute. When audio mode is active, the LED brightens and dims in sync with the amplitude of whatever is playing through your speakers. A short sound cue confirms the switch — up when entering audio mode, and down when returning to scroll. The menu bar icon's ring turns blue while audio mode is active so you can tell at a glance which mode you're in.
 
-In audio mode you have modifiers available on the knob:
+Volume precision is automatic — the knob responds to how fast you turn it:
 
-- **Shift + turn** — adjusts volume in quarter-step increments, similar to using shift-option-volume up/down. The On Screen Display will appear and you will get audio cues that the volume has changed.
-- **Shift + Option + turn** — adjusts volume in small, perceptually-consistent increments. The On Screen Display will NOT appear, and you will not get any audio cues that the volume has changed. Know that the volume will change in 1% increments across the full range of values.
+- **Slow turn** — fine increments (~1%), perceptually consistent across the full range. No OSD or audio cue.
+- **Medium turn** — quarter-step increments (similar to Shift+Option+Volume). OSD and audio cues appear.
+- **Fast turn** — standard volume steps. OSD and audio cues appear.
+
+You can also force a specific precision with modifier keys:
+
+- **Shift + turn** — quarter-step increments regardless of turn speed.
+- **Shift + Option + turn** — fine increments (~1%) regardless of turn speed.
 - **Fn + turn** — temporarily flips the mode. If audio mode is off, Fn switches to audio mode; if audio mode is on, Fn switches back to scroll mode.
 
 The **click action** in audio mode is configurable via *Click in audio mode* in the menu. Choose **Mute/unmute** or **Play/Pause** as your primary action. Holding **Shift** while clicking activates the alternate action — so you can reach both without changing the menu setting.
@@ -122,7 +128,7 @@ With the PowerMate plugged in, turn the knob or press the button; the demo print
 
 **PowerMateAgent** turns the knob and button into keyboard/scroll events that **any application** receives (browser, editor, etc.):
 
-- **Rotation** → vertical scroll, or **Up/Down arrow keys** when a menu (or submenu) is focused, or **system volume** in audio control mode. Hold **Shift** in audio mode for fine-grained volume control; hold **Fn** to temporarily flip modes.
+- **Rotation** → vertical scroll, or **Up/Down arrow keys** when a menu (or submenu) is focused, or **system volume** in audio control mode. Volume precision is automatic based on turn speed (slow = ~1%, medium = quarter-step, fast = standard); hold **Shift** or **Shift+Option** to force a specific precision; hold **Fn** to temporarily flip modes.
 - **Click** (short press) → **left mouse button** (at cursor), or **Return** when a menu is focused (chooses the highlighted item), or **mute/unmute / play/pause** in audio control mode (configurable; Shift alternates between the two actions).
 - **Long press** → **right mouse button**, or configurable to double-click, **toggle audio/scroll mode**, or **run a shell script**.
 
@@ -231,6 +237,10 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 - Apple IOKit HID: `IOHIDManager`, `IOHIDDeviceOpen`, `IOHIDDeviceRegisterInputReportCallback`
 
 ### Versions
+
+#### 1.0.12
+
+**Velocity-based volume control**: turning the knob slowly now adjusts volume in fine (~1%) increments, a medium turn uses quarter-step increments, and a fast turn uses standard volume steps — automatically, with no modifier keys required. Shift and Shift+Option still work as explicit overrides to force a specific precision.
 
 #### 1.0.11
 
