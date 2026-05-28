@@ -13,11 +13,11 @@ To install, download the latest release from the [releases tab](https://github.c
 
 ```bash
 brew tap jameslockman/tap
-brew install --cask griffin-powermate-driver
+brew install --cask griffin-powermate-agent
 ```
 Uninstalling with Homebrew is just as easy
 ```bash
-brew uninstall --cask griffin-powermate-driver
+brew uninstall --cask griffin-powermate-agent
 ```
 
 Once installed, PowerMate Agent will appear in your menu bar.
