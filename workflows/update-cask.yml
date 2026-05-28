@@ -1,0 +1,45 @@
+name: Update Cask
+
+on:
+  repository_dispatch:
+    types: [new-release]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to update to (e.g. 1.0.1)"
+        required: true
+      sha256:
+        description: "SHA256 of the new DMG"
+        required: true
+
+jobs:
+  update-cask:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set version and sha256
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "sha256=${{ github.event.inputs.sha256 }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.client_payload.version }}" >> $GITHUB_OUTPUT
+            echo "sha256=${{ github.event.client_payload.sha256 }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update cask version and sha256
+        run: |
+          VERSION="${{ steps.vars.outputs.version }}"
+          SHA256="${{ steps.vars.outputs.sha256 }}"
+          sed -i "s/version \".*\"/version \"${VERSION}\"/" Casks/griffin-powermate-driver.rb
+          sed -i "s/sha256 \".*\"/sha256 \"${SHA256}\"/" Casks/griffin-powermate-driver.rb
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/griffin-powermate-driver.rb
+          git commit -m "Update griffin-powermate-driver to ${{ steps.vars.outputs.version }}"
+          git push
