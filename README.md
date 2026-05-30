@@ -42,10 +42,11 @@ The PowerMate can also act as a mouse button. A momentary push of the button act
 Volume control works exactly like the physical keyboard volume keys:
 
 - **Turn** — standard volume step, identical to pressing F11/F12.
-- **Shift + turn** — fine volume step, identical to pressing Shift+Option+Volume. Useful for precise adjustments.
-- **Fn + turn** — temporarily flips the mode. If audio mode is off, Fn switches to audio mode; if audio mode is on, Fn switches back to scroll mode.
+- **Shift + turn** — fine volume step, identical to pressing Shift+Option+F11/F12. Useful for precise adjustments.
+  - *Note: You can swap the fine and normal volume controls in the menu if you prefer a slower turn rate.*
+- **Fn + turn** — temporarily flips the mode. If scroll mode is active, Fn switches to audio mode; if audio mode is on, Fn switches back to scroll mode.
 
-**Press and turn** — hold the button and turn the knob to skip tracks in the current media player. Turn clockwise to skip to the next track, counter-clockwise to go back. Releasing the button won't trigger a click or mute — only the track skip fires.
+**Press and turn** — hold the button and turn the knob to skip tracks in the current media player. Turn clockwise to skip to the next track, counter-clockwise to go back.
 
 The **click action** in audio mode is configurable via *Click in audio mode* in the menu. Choose **Mute/unmute** or **Play/Pause** as your primary action. Holding **Shift** while clicking activates the alternate action — so you can reach both without changing the menu setting.
 
