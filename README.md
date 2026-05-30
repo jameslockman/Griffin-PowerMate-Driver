@@ -39,17 +39,13 @@ The PowerMate can also act as a mouse button. A momentary push of the button act
 
 **Audio mode**: Enable "Audio mode" in the menu and the knob adjusts system volume while the button toggles mute. When audio mode is active, the LED brightens and dims in sync with the amplitude of whatever is playing through your speakers. A short sound cue confirms the switch — up when entering audio mode, and down when returning to scroll. The menu bar icon's ring turns blue while audio mode is active so you can tell at a glance which mode you're in.
 
-Volume precision is automatic — the knob responds to how fast you turn it:
+Volume control works exactly like the physical keyboard volume keys:
 
-- **Slow turn** — fine increments (~1%), perceptually consistent across the full range. No OSD or audio cue.
-- **Medium turn** — quarter-step increments (similar to Shift+Option+Volume). OSD and audio cues appear.
-- **Fast turn** — standard volume steps. OSD and audio cues appear.
-
-You can also force a specific precision with modifier keys:
-
-- **Shift + turn** — quarter-step increments regardless of turn speed.
-- **Shift + Option + turn** — fine increments (~1%) regardless of turn speed.
+- **Turn** — standard volume step, identical to pressing F11/F12.
+- **Shift + turn** — fine volume step, identical to pressing Shift+Option+Volume. Useful for precise adjustments.
 - **Fn + turn** — temporarily flips the mode. If audio mode is off, Fn switches to audio mode; if audio mode is on, Fn switches back to scroll mode.
+
+**Press and turn** — hold the button and turn the knob to skip tracks in the current media player. Turn clockwise to skip to the next track, counter-clockwise to go back. Releasing the button won't trigger a click or mute — only the track skip fires.
 
 The **click action** in audio mode is configurable via *Click in audio mode* in the menu. Choose **Mute/unmute** or **Play/Pause** as your primary action. Holding **Shift** while clicking activates the alternate action — so you can reach both without changing the menu setting.
 
@@ -128,7 +124,8 @@ With the PowerMate plugged in, turn the knob or press the button; the demo print
 
 **PowerMateAgent** turns the knob and button into keyboard/scroll events that **any application** receives (browser, editor, etc.):
 
-- **Rotation** → vertical scroll, or **Up/Down arrow keys** when a menu (or submenu) is focused, or **system volume** in audio control mode. Volume precision is automatic based on turn speed (slow = ~1%, medium = quarter-step, fast = standard); hold **Shift** or **Shift+Option** to force a specific precision; hold **Fn** to temporarily flip modes.
+- **Rotation** → vertical scroll, or **Up/Down arrow keys** when a menu (or submenu) is focused, or **system volume** in audio control mode (standard step; hold **Shift** for fine step; hold **Fn** to temporarily flip modes).
+- **Press and turn** → skip to the next or previous track in the current media player.
 - **Click** (short press) → **left mouse button** (at cursor), or **Return** when a menu is focused (chooses the highlighted item), or **mute/unmute / play/pause** in audio control mode (configurable; Shift alternates between the two actions).
 - **Long press** → **right mouse button**, or configurable to double-click, **toggle audio/scroll mode**, or **run a shell script**.
 
@@ -237,6 +234,12 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 - Apple IOKit HID: `IOHIDManager`, `IOHIDDeviceOpen`, `IOHIDDeviceRegisterInputReportCallback`
 
 ### Versions
+
+#### 1.0.13
+
+**Press and turn — track skip**: holding the button while turning the knob now skips tracks in the current media player. Clockwise skips to the next track; counter-clockwise goes to the previous track. Releasing the button after a press-and-turn does not trigger a click or mute.
+
+**Simplified volume control**: volume now uses the same NX media key events as the physical keyboard volume keys, which works reliably across all output devices (built-in speakers, Bluetooth headsets, HDMI monitors, USB audio). Turning without modifiers is a standard step (same as F11/F12); holding **Shift** gives a fine step (same as Shift+Option+Volume). The velocity-based automatic precision tiers and the volume OSD have been removed in favour of this simpler, more consistent approach.
 
 #### 1.0.12
 
