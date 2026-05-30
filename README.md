@@ -237,7 +237,7 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 
 #### 1.0.13
 
-**Press and turn — track skip**: holding the button while turning the knob now skips tracks in the current media player. Clockwise skips to the next track; counter-clockwise goes to the previous track. Releasing the button after a press-and-turn does not trigger a click or mute.
+**Press and turn — track skip**: holding the button while turning the knob now skips tracks in the current media player. Clockwise skips to the next track; counter-clockwise goes to the previous track.
 
 **Simplified volume control**: volume now uses the same NX media key events as the physical keyboard volume keys, which works reliably across all output devices (built-in speakers, Bluetooth headsets, HDMI monitors, USB audio). Turning without modifiers is a standard step (same as F11/F12); holding **Shift** gives a fine step (same as Shift+Option+Volume). The velocity-based automatic precision tiers and the volume OSD have been removed in favour of this simpler, more consistent approach.
 
