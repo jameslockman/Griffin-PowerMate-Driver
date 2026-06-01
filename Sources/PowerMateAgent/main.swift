@@ -37,17 +37,25 @@ private let kVUMeter           = "vuMeterEnabled"
 private let kLongPressAction   = "longPressAction"
 private let kScript1           = "script1"
 private let kScript2           = "script2"
-
-var scrollReversed      = defaults.bool(forKey: kScrollReversed)
-var audioControlEnabled = defaults.bool(forKey: kAudioControl)
+private let kAudioStepSwapped  = "audioStepSwapped"
+var scrollReversed        = defaults.bool(forKey: kScrollReversed)
+var audioControlEnabled   = defaults.bool(forKey: kAudioControl)
 // VU meter defaults to true (on) for existing users; only false if explicitly disabled.
-var vuMeterEnabled      = defaults.object(forKey: kVUMeter) == nil ? true : defaults.bool(forKey: kVUMeter)
+var vuMeterEnabled        = defaults.object(forKey: kVUMeter) == nil ? true : defaults.bool(forKey: kVUMeter)
+// When true, the default turn is fine step and Shift is standard step (swapped from default).
+var audioStepSwapped      = defaults.bool(forKey: kAudioStepSwapped)
+
+// Using a HID system state source makes all synthetic events indistinguishable from
+// real hardware events. Apps that inspect the event source route hardware-sourced events
+// via keyboard/input focus; nil-sourced (synthetic) events may fall back to spatial
+// (cursor-position) routing, causing inconsistent behaviour across applications.
+private let kHIDEventSource = CGEventSource(stateID: .hidSystemState)
 
 func postScroll(delta: Int) {
     var pixels = Int32(delta) * scrollPixelsPerStep
     if scrollReversed { pixels = -pixels }
     guard let event = CGEvent(
-        scrollWheelEvent2Source: nil,
+        scrollWheelEvent2Source: kHIDEventSource,
         units: .pixel,
         wheelCount: 1,
         wheel1: pixels,
@@ -59,14 +67,14 @@ func postScroll(delta: Int) {
 }
 
 // Key codes (HIToolbox): Up = 0x7E, Down = 0x7D, Return = 0x24
-private let kUpArrow: CGKeyCode = 0x7E
+private let kUpArrow: CGKeyCode   = 0x7E
 private let kDownArrow: CGKeyCode = 0x7D
 private let kReturnKey: CGKeyCode = 0x24
 
 /// Post one key press (down + up).
 func postKey(_ keyCode: CGKeyCode) {
-    guard let down = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
-          let up = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else { return }
+    guard let down = CGEvent(keyboardEventSource: kHIDEventSource, virtualKey: keyCode, keyDown: true),
+          let up = CGEvent(keyboardEventSource: kHIDEventSource, virtualKey: keyCode, keyDown: false) else { return }
     down.post(tap: .cghidEventTap)
     up.post(tap: .cghidEventTap)
 }
@@ -82,8 +90,8 @@ func cocoaToQuartz(_ cocoa: NSPoint) -> CGPoint {
 func postMouseClick(at location: CGPoint, button: CGMouseButton = .left) {
     let downType: CGEventType = button == .left ? .leftMouseDown : .rightMouseDown
     let upType: CGEventType = button == .left ? .leftMouseUp : .rightMouseUp
-    if let down = CGEvent(mouseEventSource: nil, mouseType: downType, mouseCursorPosition: location, mouseButton: button),
-       let up = CGEvent(mouseEventSource: nil, mouseType: upType, mouseCursorPosition: location, mouseButton: button) {
+    if let down = CGEvent(mouseEventSource: kHIDEventSource, mouseType: downType, mouseCursorPosition: location, mouseButton: button),
+       let up = CGEvent(mouseEventSource: kHIDEventSource, mouseType: upType, mouseCursorPosition: location, mouseButton: button) {
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
     }
@@ -92,10 +100,10 @@ func postMouseClick(at location: CGPoint, button: CGMouseButton = .left) {
 /// Post a proper double-click at the given Quartz location using kCGMouseEventClickState = 2
 /// so the system treats it as one double-click, not two single clicks.
 func postDoubleClick(at location: CGPoint) {
-    guard let down1 = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: location, mouseButton: .left),
-          let up1 = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: location, mouseButton: .left),
-          let down2 = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: location, mouseButton: .left),
-          let up2 = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: location, mouseButton: .left) else { return }
+    guard let down1 = CGEvent(mouseEventSource: kHIDEventSource, mouseType: .leftMouseDown, mouseCursorPosition: location, mouseButton: .left),
+          let up1 = CGEvent(mouseEventSource: kHIDEventSource, mouseType: .leftMouseUp, mouseCursorPosition: location, mouseButton: .left),
+          let down2 = CGEvent(mouseEventSource: kHIDEventSource, mouseType: .leftMouseDown, mouseCursorPosition: location, mouseButton: .left),
+          let up2 = CGEvent(mouseEventSource: kHIDEventSource, mouseType: .leftMouseUp, mouseCursorPosition: location, mouseButton: .left) else { return }
     down1.post(tap: .cghidEventTap)
     up1.post(tap: .cghidEventTap)
     down2.setIntegerValueField(.mouseEventClickState, value: 2)
@@ -191,10 +199,6 @@ func useAudioBehavior() -> Bool {
     return wantAudio && !useMenuBehavior()
 }
 
-// Accumulator so the knob requires multiple ticks per volume step.
-// Raise volumeTicksPerStep to slow the rate of change; lower it to speed it up.
-private var volumeAccumulator = 0
-private let volumeTicksPerStep = 2
 
 /// Load a sound by name, checking the app bundle Resources first, then falling back to system sounds.
 /// Place custom files named e.g. "ToAudio.aiff" / "ToScroll.aiff" in scripts/Sounds/ and they will
@@ -232,8 +236,8 @@ func signalModeChange(toAudio: Bool) {
 // Volume and mute via NX system-defined media key events — same path as F11/F12/F10.
 // One event per knob tick = one hardware volume step (~4% per step, finer than F11/F12).
 // NX_KEYTYPE_SOUND_UP = 0, NX_KEYTYPE_SOUND_DOWN = 1, NX_KEYTYPE_MUTE = 7
-private func postMediaKey(_ keyType: Int32, keyDown: Bool) {
-    let flags = NSEvent.ModifierFlags(rawValue: keyDown ? 0xa00 : 0xb00)
+private func postMediaKey(_ keyType: Int32, keyDown: Bool, modifiers: NSEvent.ModifierFlags = []) {
+    let flags = NSEvent.ModifierFlags(rawValue: modifiers.rawValue | (keyDown ? 0xa00 : 0xb00))
     let data1 = Int(keyType) << 16 | (keyDown ? 0x0a00 : 0x0b00)
     guard let event = NSEvent.otherEvent(
         with: .systemDefined,
@@ -252,18 +256,17 @@ private func postMediaKey(_ keyType: Int32, keyDown: Bool) {
 func toggleMute() {
     postMediaKey(7, keyDown: true)
     postMediaKey(7, keyDown: false)
+    // Toggle our software mute flag. isOutputMuted() is unreliable on USB/Bluetooth devices
+    // (kAudioDevicePropertyMute may not be exposed on main element), so we track state ourselves.
+    // Volume adjustments clear _isMuted, so this flag stays in sync with user intent.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        _isMuted.toggle()
+    }
 }
 
-// Fine volume control in the dB domain — equal dB steps are perceptually equal regardless
-// of where you are on the volume curve (unlike equal scalar steps, which feel larger at
-// low volumes and smaller at loud ones).
-// Uses kAudioDevicePropertyVolumeDecibels ('vold') so we stay in logarithmic space.
-// Hardware still quantises writes; the accumulated target crosses step boundaries naturally.
-private let kVolumeDecibels = AudioObjectPropertySelector(0x766F6C64)  // 'vold'
-private var fineVolumeTarget: Float32 = .nan  // NaN = needs init from hardware
-private var lastVolumeTier = -1               // -1 = uninitialised; 0=fine, 1=quarter, 2=standard
+private var _isMuted = false
 
-func fineVolumeDevice() -> AudioDeviceID? {
+func outputDevice() -> AudioDeviceID? {
     var deviceID: AudioDeviceID = kAudioObjectUnknown
     var size = UInt32(MemoryLayout<AudioDeviceID>.size)
     var hwAddr = AudioObjectPropertyAddress(
@@ -277,78 +280,17 @@ func fineVolumeDevice() -> AudioDeviceID? {
     return deviceID
 }
 
-func adjustVolumeFine(delta: Int) {
-    guard let deviceID = fineVolumeDevice() else { return }
-    var dbAddr = AudioObjectPropertyAddress(
-        mSelector: kVolumeDecibels,
-        mScope: kAudioDevicePropertyScopeOutput,
-        mElement: kAudioObjectPropertyElementMain
-    )
-    var size = UInt32(MemoryLayout<Float32>.size)
-
-    // Initialise target from current hardware dB value on first call or after reset.
-    if fineVolumeTarget.isNaN {
-        var current: Float32 = 0
-        guard AudioObjectGetPropertyData(deviceID, &dbAddr, 0, nil, &size, &current) == noErr
-        else { return }
-        fineVolumeTarget = current
-    }
-
-    // Compute an adaptive dB step targeting ~2 knob ticks per hardware volume step.
-    // Hardware steps are uniform in scalar space (24 steps, Δscalar ≈ 1/24). The equivalent
-    // dB span at the current level is 20·log₁₀(1 + 1/(24·s)). Using half of that per tick
-    // means it always takes ~2 ticks to cross a hardware boundary across the full range.
-    // Scalar is estimated from the accumulated dB target (not re-read from hardware) and
-    // floored at 0.1 so the step size stays reasonable at very low volumes.
-    let estimatedScalar: Float = max(pow(10.0, fineVolumeTarget / 20.0), 0.1)
-    let localDbStep: Float = 20.0 * log10(1.0 + 1.0 / (24.0 * estimatedScalar))
-    let adaptiveStep: Float = localDbStep / 2.0
-
-    fineVolumeTarget += Float32(delta) * adaptiveStep
-
-    // Clamp to the device's reported dB range (typically around -70..0 dB).
-    var rangeAddr = AudioObjectPropertyAddress(
-        mSelector: kAudioDevicePropertyVolumeRangeDecibels,
-        mScope: kAudioDevicePropertyScopeOutput,
-        mElement: kAudioObjectPropertyElementMain
-    )
-    var range = AudioValueRange(mMinimum: -70, mMaximum: 0)
-    var rangeSize = UInt32(MemoryLayout<AudioValueRange>.size)
-    AudioObjectGetPropertyData(deviceID, &rangeAddr, 0, nil, &rangeSize, &range)
-    fineVolumeTarget = max(Float32(range.mMinimum), min(Float32(range.mMaximum), fineVolumeTarget))
-
-    var vol = fineVolumeTarget
-    AudioObjectSetPropertyData(deviceID, &dbAddr, 0, nil, size, &vol)
-}
-
-// Quarter-step volume via NX systemDefined media key events with Shift+Option modifiers.
-// NX events (not CGEvent keyboard events) trigger the macOS volume OSD and go through
-// the same system handler as physical key presses. Including Shift+Option in the modifier
-// flags signals the handler to apply quarter-step behaviour (~1% per press).
-// Fires 2 events per knob tick so the full range takes ~32 ticks instead of ~64.
-// NX_KEYTYPE_SOUND_UP = 0, NX_KEYTYPE_SOUND_DOWN = 1
-func adjustVolumeQuarterStep(delta: Int) {
-    guard delta != 0 else { return }
-    let keyType: Int32 = delta > 0 ? 0 : 1
-    let shiftOption: UInt = NSEvent.ModifierFlags.shift.rawValue | NSEvent.ModifierFlags.option.rawValue
-    for _ in 0..<abs(delta) * 2 {
-        for keyDown in [true, false] {
-            let base: UInt = keyDown ? 0xa00 : 0xb00
-            let flags = NSEvent.ModifierFlags(rawValue: base | shiftOption)
-            let data1 = Int(keyType) << 16 | (keyDown ? 0x0a00 : 0x0b00)
-            guard let event = NSEvent.otherEvent(
-                with: .systemDefined,
-                location: .zero,
-                modifierFlags: flags,
-                timestamp: ProcessInfo.processInfo.systemUptime,
-                windowNumber: 0,
-                context: nil,
-                subtype: 8,
-                data1: data1,
-                data2: -1
-            ) else { continue }
-            event.cgEvent?.post(tap: .cghidEventTap)
-        }
+// Posts NX volume key events — identical to the physical keyboard volume keys.
+// fine=false: standard step (~6.25%, same as F11/F12).
+// fine=true:  shift+option step (~1.5625%, same as Shift+Option+F11/F12).
+// Repeated presses for delta > 1 give velocity-proportional movement in normal mode.
+func adjustVolume(up: Bool, fine: Bool, presses: Int = 1) {
+    if up && _isMuted { setMuted(false) }
+    let keyType: Int32 = up ? 0 : 1  // NX_KEYTYPE_SOUND_UP / NX_KEYTYPE_SOUND_DOWN
+    let modFlags: NSEvent.ModifierFlags = fine ? [.shift, .option] : []
+    for _ in 0 ..< max(1, presses) {
+        postMediaKey(keyType, keyDown: true,  modifiers: modFlags)
+        postMediaKey(keyType, keyDown: false, modifiers: modFlags)
     }
 }
 
@@ -356,6 +298,20 @@ func adjustVolumeQuarterStep(delta: Int) {
 func togglePlayPause() {
     postMediaKey(16, keyDown: true)
     postMediaKey(16, keyDown: false)
+}
+
+/// Set the hardware mute state. Writes kAudioDevicePropertyMute; fire-and-forget if unsupported.
+func setMuted(_ muted: Bool) {
+    _isMuted = muted
+    guard let deviceID = outputDevice() else { return }
+    var addr = AudioObjectPropertyAddress(
+        mSelector: kAudioDevicePropertyMute,
+        mScope: kAudioDevicePropertyScopeOutput,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    var value: UInt32 = muted ? 1 : 0
+    let size = UInt32(MemoryLayout<UInt32>.size)
+    AudioObjectSetPropertyData(deviceID, &addr, 0, nil, size, &value)
 }
 
 // Click action: what the button does in audio mode (menu behavior still takes priority).
@@ -367,14 +323,27 @@ var clickAction: ClickAction = {
     }
 }()
 
-// Velocity thresholds (deltas per second) for automatic volume precision selection.
-// Below slowThreshold → fine (~1% steps); below fastThreshold → quarter-step; above → standard.
-private let volumeVelocitySlowThreshold: Double = 6
-private let volumeVelocityFastThreshold: Double = 15
+// Tracks whether rotation occurred while the button was held, so the subsequent
+// button-up click can be suppressed (avoiding an unintended mute/click after track skip).
+private var _didRotateWhileButtonDown = false
+// Accumulates rotation units while button is held; a track skip fires every kTrackSkipThreshold units.
+private var _trackSkipAccumulator = 0
+private let kTrackSkipThreshold = 5
 
 driver.onRotate = { delta, rate in
     lastRotationTime = CFAbsoluteTimeGetCurrent()
     startThrob()
+    if isButtonDown {
+        _didRotateWhileButtonDown = true
+        _trackSkipAccumulator += delta
+        while abs(_trackSkipAccumulator) >= kTrackSkipThreshold {
+            let keyType: Int32 = _trackSkipAccumulator > 0 ? 17 : 18  // NX_KEYTYPE_NEXT / NX_KEYTYPE_PREVIOUS
+            postMediaKey(keyType, keyDown: true)
+            postMediaKey(keyType, keyDown: false)
+            _trackSkipAccumulator -= _trackSkipAccumulator > 0 ? kTrackSkipThreshold : -kTrackSkipThreshold
+        }
+        return
+    }
     if useMenuBehavior() {
         let arrowKey: CGKeyCode = delta > 0 ? kDownArrow : kUpArrow
         for _ in 0 ..< abs(delta) {
@@ -387,46 +356,26 @@ driver.onRotate = { delta, rate in
             DispatchQueue.main.asyncAfter(deadline: .now() + menuModeTimeoutInterval, execute: work)
         }
     } else if useAudioBehavior() {
-        let mods = NSEvent.modifierFlags
-        if mods.contains(.shift) && mods.contains(.option) {
-            adjustVolumeFine(delta: delta)          // Option+Shift: adaptive dB ~1% increments
-        } else if mods.contains(.shift) {
-            adjustVolumeQuarterStep(delta: delta)   // Shift: Shift+Option+VolumeKey quarter steps
-        } else {
-            // Velocity-based precision: slow → fine (~1%), medium → quarter-step, fast → standard.
-            // rate is nil on the very first report; treat as slow.
-            let r = rate ?? 0
-            let tier = r < volumeVelocitySlowThreshold ? 0 : r < volumeVelocityFastThreshold ? 1 : 2
-            if tier != lastVolumeTier {
-                // Reset both accumulators on any tier change so neither carries stale state
-                // into the new tier (avoids phantom steps and stale dB target jumps).
-                volumeAccumulator = 0
-                fineVolumeTarget = .nan
-                lastVolumeTier = tier
-            }
-            if tier == 0 {
-                adjustVolumeFine(delta: delta)
-            } else if tier == 1 {
-                adjustVolumeQuarterStep(delta: delta)
-            } else {
-                volumeAccumulator += delta
-                let steps = volumeAccumulator / volumeTicksPerStep
-                if steps != 0 {
-                    volumeAccumulator -= steps * volumeTicksPerStep
-                    let keyType: Int32 = steps > 0 ? 0 : 1
-                    for _ in 0..<abs(steps) {
-                        postMediaKey(keyType, keyDown: true)
-                        postMediaKey(keyType, keyDown: false)
-                    }
-                }
-            }
-        }
+        let shiftHeld = NSEvent.modifierFlags.contains(.shift)
+        // audioStepSwapped flips the default: normally no-modifier=standard, Shift=fine;
+        // when swapped, no-modifier=fine, Shift=standard.
+        let fine = audioStepSwapped ? !shiftHeld : shiftHeld
+        let up = delta > 0
+        // fine mode: one fine step per tick regardless of velocity.
+        // standard mode: abs(delta) presses so faster spinning moves volume faster.
+        let presses = fine ? 1 : abs(delta)
+        adjustVolume(up: up, fine: fine, presses: presses)
     } else {
         postScroll(delta: delta)
     }
 }
 
 driver.onClick = {
+    // Defer by one run-loop cycle so that any rotation in the same HID report is processed
+    // first (the driver handles button-change before rotation within each report block).
+    // This ensures _didRotateWhileButtonDown is set before we decide whether to act.
+    DispatchQueue.main.async {
+    guard !_didRotateWhileButtonDown else { return }
     if useMenuBehavior() {
         postKey(kReturnKey)
         // Do not exit menu mode here: a submenu may open and we need to keep sending arrow keys.
@@ -441,6 +390,7 @@ driver.onClick = {
         exitMenuMode()
         postMouseClick(button: .left)
     }
+    } // end DispatchQueue.main.async
 }
 
 // Long-press action: right-click, double-click, toggle audio mode, or run a script (chosen in menu)
@@ -592,6 +542,8 @@ func showConfigureScripts() {
 }
 
 driver.onLongPress = {
+    DispatchQueue.main.async {
+    guard !_didRotateWhileButtonDown else { return }
     switch longPressAction {
     case .rightClick:
         enterMenuMode()
@@ -607,9 +559,6 @@ driver.onLongPress = {
         DispatchQueue.main.async {
             audioControlEnabled.toggle()
             defaults.set(audioControlEnabled, forKey: kAudioControl)
-            volumeAccumulator = 0
-            fineVolumeTarget = .nan
-            lastVolumeTier = -1
             if audioControlEnabled {
                 if #available(macOS 14.2, *) { startAudioMeter() }
             } else {
@@ -624,6 +573,7 @@ driver.onLongPress = {
             : defaults.string(forKey: kScript1) ?? ""
         runScript(command)
     }
+    } // end DispatchQueue.main.async
 }
 
 // Audio amplitude metering — drives the LED as a VU meter when audio control mode is on.
@@ -789,6 +739,8 @@ func startThrob() {
 
 driver.onButtonDown = {
     isButtonDown = true
+    _didRotateWhileButtonDown = false
+    _trackSkipAccumulator = 0
     setLEDOffMain(255)
 }
 driver.onButtonUp = {
@@ -853,6 +805,7 @@ app.delegate = appDelegate
 
 final class MenuHandler: NSObject, NSMenuDelegate {
     var reverseScrollItem: NSMenuItem!
+    var audioStepSwappedItem: NSMenuItem!
     var audioControlItem: NSMenuItem!
     var clickMuteItem: NSMenuItem!
     var clickPlayPauseItem: NSMenuItem!
@@ -864,6 +817,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
 
     func updateMenuState() {
         reverseScrollItem.state = scrollReversed ? .on : .off
+        audioStepSwappedItem.state = audioStepSwapped ? .on : .off
         audioControlItem.state = audioControlEnabled ? .on : .off
         clickMuteItem.state = (clickAction == .mute) ? .on : .off
         clickPlayPauseItem.state = (clickAction == .playPause) ? .on : .off
@@ -886,12 +840,15 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         updateMenuState()
     }
 
+    @objc func toggleAudioStepSwapped() {
+        audioStepSwapped.toggle()
+        defaults.set(audioStepSwapped, forKey: kAudioStepSwapped)
+        updateMenuState()
+    }
+
     @objc func toggleAudioControl() {
         audioControlEnabled.toggle()
         defaults.set(audioControlEnabled, forKey: kAudioControl)
-        volumeAccumulator = 0
-        fineVolumeTarget = .nan
-        lastVolumeTier = -1
         if audioControlEnabled {
             if #available(macOS 14.2, *) { startAudioMeter() }
         } else {
@@ -968,12 +925,13 @@ final class MenuHandler: NSObject, NSMenuDelegate {
             ("Audio mode", " – Enable in the menu to use the PowerMate as a volume control. Otherwise it acts as a scroll wheel."),
             ("VU Meter", " – Pulse the blue LED in time with your audio stream."),
             ("Click in audio mode", " – Set the default action to Play/Pause or Mute/Unmute. Hold Shift to use the other action."),
+            ("Prefer Fine volume in audio mode", " – Swap normal and fine volume steps in audio mode."),
             ("Reverse scroll direction", " – Reverses the scroll direction in scroll mode."),
             ("Long press", " – Right-click, double-click, toggle audio/scroll mode, or run a script.\n"),
             ("Modifiers:", ""),
             ("Fn + turn", " – Momentarily toggle between scroll and audio mode."),
-            ("Shift + turn (audio mode)", " – Quarter-step volume control (like Control-Shift-VolumeUp/Down)."),
-            ("Option + Shift + turn (audio mode)", " – Fine volume control (~1% increments)."),
+            ("Shift + turn (audio mode)", " – Fine volume step (like Shift+Option+Volume keys)."),
+            ("Press + turn (audio or scroll mode)", " – Skip to next or previous track in the current media player."),
             ("Shift + click (audio mode)", " – Alternate between mute and play/pause.\n"),
             ("Configure Scripts", " – Sets shell commands for long press (and Shift+long press).\n"),
             ("Feedback/bug report", " - Let us know if you have any issues or suggestions."),
@@ -1202,6 +1160,11 @@ clickMenu.addItem(clickPlayPauseItem)
 let clickSub = NSMenuItem(title: "Click in audio mode", action: nil, keyEquivalent: "")
 clickSub.submenu = clickMenu
 menu.addItem(clickSub)
+
+let audioStepSwappedItem = NSMenuItem(title: "Prefer Fine volume in audio mode", action: #selector(MenuHandler.toggleAudioStepSwapped), keyEquivalent: "")
+audioStepSwappedItem.target = menuHandler
+menuHandler.audioStepSwappedItem = audioStepSwappedItem
+menu.addItem(audioStepSwappedItem)
 
 let reverseItem = NSMenuItem(title: "Reverse scroll direction", action: #selector(MenuHandler.toggleScrollReversed), keyEquivalent: "")
 reverseItem.target = menuHandler

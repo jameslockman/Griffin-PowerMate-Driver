@@ -19,6 +19,12 @@ let package = Package(
             linkerSettings: [.linkedFramework("IOKit"), .linkedFramework("CoreFoundation")]
         ),
         .target(
+            name: "CAudioVolume",
+            path: "Sources/CAudioVolume",
+            publicHeadersPath: "include",
+            linkerSettings: [.linkedFramework("AudioToolbox")]
+        ),
+        .target(
             name: "PowerMateDriver",
             dependencies: ["CPowerMateLED"],
             path: "Sources/PowerMateDriver"
