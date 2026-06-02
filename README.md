@@ -46,6 +46,8 @@ Volume control works exactly like the physical keyboard volume keys:
   - *Note: You can swap the fine and normal volume controls in the menu if you prefer a slower turn rate.*
 - **Fn + turn** — temporarily flips the mode. If scroll mode is active, Fn switches to audio mode; if audio mode is on, Fn switches back to scroll mode.
 
+In **scroll mode**, turning the knob scrolls vertically and **Shift + turn** scrolls horizontally. Enable **Default to horizontal scroll** in the menu to swap the axes — turning without a modifier scrolls horizontally, and Shift + turn scrolls vertically. **Reverse scroll direction** reverses whichever axis is currently active.
+
 **Press and turn** — hold the button and turn the knob to skip tracks in the current media player. Turn clockwise to skip to the next track, counter-clockwise to go back.
 
 The **click action** in audio mode is configurable via *Click in audio mode* in the menu. Choose **Mute/unmute** or **Play/Pause** as your primary action. Holding **Shift** while clicking activates the alternate action — so you can reach both without changing the menu setting.
@@ -125,7 +127,7 @@ With the PowerMate plugged in, turn the knob or press the button; the demo print
 
 **PowerMateAgent** turns the knob and button into keyboard/scroll events that **any application** receives (browser, editor, etc.):
 
-- **Rotation** → vertical scroll, or **Up/Down arrow keys** when a menu (or submenu) is focused, or **system volume** in audio control mode (standard step; hold **Shift** for fine step; hold **Fn** to temporarily flip modes).
+- **Rotation** → vertical scroll (or horizontal when **Default to horizontal scroll** is enabled), or **Up/Down arrow keys** when a menu (or submenu) is focused, or **system volume** in audio control mode (standard step; hold **Shift** for fine step; hold **Fn** to temporarily flip modes). Hold **Shift** to scroll the alternate axis in scroll mode.
 - **Press and turn** → skip to the next or previous track in the current media player.
 - **Click** (short press) → **left mouse button** (at cursor), or **Return** when a menu is focused (chooses the highlighted item), or **mute/unmute / play/pause** in audio control mode (configurable; Shift alternates between the two actions).
 - **Long press** → **right mouse button**, or configurable to double-click, **toggle audio/scroll mode**, or **run a shell script**.

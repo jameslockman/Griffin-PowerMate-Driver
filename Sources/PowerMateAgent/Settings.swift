@@ -1,0 +1,49 @@
+import Foundation
+import AppKit
+
+// MARK: - UserDefaults
+
+let defaults = UserDefaults.standard
+
+let kScrollReversed   = "scrollReversed"
+let kAudioControl     = "audioControlEnabled"
+let kClickAction      = "clickAction"
+let kVUMeter          = "vuMeterEnabled"
+let kLongPressAction  = "longPressAction"
+let kScript1          = "script1"
+let kScript2          = "script2"
+let kAudioStepSwapped  = "audioStepSwapped"
+let kScrollAxesSwapped = "scrollAxesSwapped"
+
+// MARK: - Persistent state
+
+var scrollReversed      = defaults.bool(forKey: kScrollReversed)
+var audioControlEnabled = defaults.bool(forKey: kAudioControl)
+// VU meter defaults to true for existing users; only false if explicitly disabled.
+var vuMeterEnabled      = defaults.object(forKey: kVUMeter) == nil ? true : defaults.bool(forKey: kVUMeter)
+// When true, the default turn is fine step and Shift is standard step (swapped from default).
+var audioStepSwapped    = defaults.bool(forKey: kAudioStepSwapped)
+// When true, the default turn scrolls horizontally and Shift+turn scrolls vertically.
+var scrollAxesSwapped   = defaults.bool(forKey: kScrollAxesSwapped)
+
+// MARK: - Click action
+
+enum ClickAction { case mute, playPause }
+var clickAction: ClickAction = {
+    switch defaults.string(forKey: kClickAction) {
+    case "playPause": return .playPause
+    default:          return .mute
+    }
+}()
+
+// MARK: - Long press action
+
+enum LongPressAction { case rightClick, doubleClick, toggleAudioMode, runScript }
+var longPressAction: LongPressAction = {
+    switch defaults.string(forKey: kLongPressAction) {
+    case "doubleClick":      return .doubleClick
+    case "toggleAudioMode":  return .toggleAudioMode
+    case "runScript":        return .runScript
+    default:                 return .rightClick
+    }
+}()
