@@ -41,11 +41,12 @@ var clickAction: ClickAction = {
 
 // MARK: - Long press action
 
-enum LongPressAction { case rightClick, doubleClick, toggleAudioMode, runScript }
+enum LongPressAction { case rightClick, doubleClick, toggleAudioMode, toggleFineScroll, runScript }
 var longPressAction: LongPressAction = {
     switch defaults.string(forKey: kLongPressAction) {
     case "doubleClick":      return .doubleClick
     case "toggleAudioMode":  return .toggleAudioMode
+    case "toggleFineScroll": return .toggleFineScroll
     case "runScript":        return .runScript
     default:                 return .rightClick
     }

@@ -15,6 +15,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     var longPressRightItem: NSMenuItem!
     var longPressDoubleItem: NSMenuItem!
     var longPressToggleAudioItem: NSMenuItem!
+    var longPressFineScrollItem: NSMenuItem!
     var longPressRunScriptItem: NSMenuItem!
 
     func updateMenuState() {
@@ -28,8 +29,9 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         vuMeterItem.state             = vuMeterEnabled ? .on : .off
         longPressRightItem.state      = (longPressAction == .rightClick) ? .on : .off
         longPressDoubleItem.state     = (longPressAction == .doubleClick) ? .on : .off
-        longPressToggleAudioItem.state = (longPressAction == .toggleAudioMode) ? .on : .off
-        longPressRunScriptItem.state  = (longPressAction == .runScript) ? .on : .off
+        longPressToggleAudioItem.state  = (longPressAction == .toggleAudioMode) ? .on : .off
+        longPressFineScrollItem.state   = (longPressAction == .toggleFineScroll) ? .on : .off
+        longPressRunScriptItem.state    = (longPressAction == .runScript) ? .on : .off
         updateStatusIcon()
         updateDockIcon()
     }
@@ -120,6 +122,12 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         updateMenuState()
     }
 
+    @objc func setLongPressFineScroll() {
+        longPressAction = .toggleFineScroll
+        defaults.set("toggleFineScroll", forKey: kLongPressAction)
+        updateMenuState()
+    }
+
     @objc func setLongPressRunScript() {
         longPressAction = .runScript
         defaults.set("runScript", forKey: kLongPressAction)
@@ -147,7 +155,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
             ("Prefer Fine volume in audio mode", " – Swap normal and fine volume steps in audio mode."),
             ("Reverse scroll direction", " – Reverses the scroll direction in scroll mode."),
             ("Prefer Fine scrolling", " – Scroll by single-pixel increments instead of the default coarse step for precise control."),
-            ("Long press", " – Right-click, double-click, toggle audio/scroll mode, or run a script.\n"),
+            ("Long press", " – Right-click, double-click, toggle audio/scroll mode, toggle fine/coarse scrolling, or run a script.\n"),
             ("Modifiers:", ""),
             ("Fn + turn", " – Momentarily toggle between scroll and audio mode."),
             ("Shift + turn (audio mode)", " – Fine volume step (like Shift+Option+Volume keys)."),
@@ -315,6 +323,10 @@ func buildMenu() {
     longPressToggleAudioItem.target = menuHandler
     menuHandler.longPressToggleAudioItem = longPressToggleAudioItem
     longPressMenu.addItem(longPressToggleAudioItem)
+    let longPressFineScrollItem = NSMenuItem(title: "Toggle fine/coarse scrolling", action: #selector(MenuHandler.setLongPressFineScroll), keyEquivalent: "")
+    longPressFineScrollItem.target = menuHandler
+    menuHandler.longPressFineScrollItem = longPressFineScrollItem
+    longPressMenu.addItem(longPressFineScrollItem)
     let longPressRunScriptItem = NSMenuItem(title: "Run script", action: #selector(MenuHandler.setLongPressRunScript), keyEquivalent: "")
     longPressRunScriptItem.target = menuHandler
     menuHandler.longPressRunScriptItem = longPressRunScriptItem
