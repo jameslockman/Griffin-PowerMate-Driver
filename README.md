@@ -46,7 +46,9 @@ Volume control works exactly like the physical keyboard volume keys:
   - *Note: You can swap the fine and normal volume controls in the menu if you prefer a slower turn rate.*
 - **Fn + turn** — temporarily flips the mode. If scroll mode is active, Fn switches to audio mode; if audio mode is on, Fn switches back to scroll mode.
 
-In **scroll mode**, turning the knob scrolls vertically and **Shift + turn** scrolls horizontally. Enable **Default to horizontal scroll** in the menu to swap the axes — turning without a modifier scrolls horizontally, and Shift + turn scrolls vertically. **Reverse scroll direction** reverses whichever axis is currently active.
+In **scroll mode**, turning the knob scrolls vertically and **Shift + turn** scrolls horizontally. **Option + turn** enables fine scrolling, which is handy for numerical controls. You can enable fine scrolling as a default in the menu.
+
+Enable **Default to horizontal scroll** in the menu to swap the axes — turning without a modifier scrolls horizontally, and Shift + turn scrolls vertically. **Reverse scroll direction** reverses whichever axis is currently active.
 
 **Press and turn** — hold the button and turn the knob to skip tracks in the current media player. Turn clockwise to skip to the next track, counter-clockwise to go back.
 
@@ -237,6 +239,14 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 - Apple IOKit HID: `IOHIDManager`, `IOHIDDeviceOpen`, `IOHIDDeviceRegisterInputReportCallback`
 
 ### Versions
+
+#### 1.0.15
+
+**Fine scrolling in scroll mode**: You can now enable fine scrolling by holding down the **Option** key. You can also set fine scrolling by default.
+
+#### 1.0.14
+
+**Horizontal scrolling**: You can now enable horizontal scrolling by holding down the **Shift** key. You can also set horizontal scrolling by default.
 
 #### 1.0.13
 
