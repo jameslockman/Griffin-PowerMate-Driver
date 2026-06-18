@@ -240,7 +240,7 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 
 ### Versions
 
-#### 1.0.15
+#### 1.0.16
 
 **Long press to switch scroll mode**: You can now configure the long press to switch between fine and coarse scrolling.
 
