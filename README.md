@@ -28,7 +28,7 @@ If the menu bar is hidden by the notch on a laptop display, then PowerMate Agent
 
 The PowerMate acts as a scroll control, so if the active window or control has a scroll option, turning the dial will scroll the window or increase/decrease selected value. You can reverse the scroll direction if you don't like the default scroll direction.
 
-The PowerMate can also act as a mouse button. A momentary push of the button acts as a mouse click when in scroll mode. A long-press of the button acts as a right-click. You can also change the behavior so that a long-press acts as a double-click, switches between scroll and audio mode, or runs a shell command.
+The PowerMate can also act as a mouse button. A momentary push of the button acts as a mouse click when in scroll mode. A long-press of the button acts as a right-click. You can also change the behavior so that a long-press acts as a double-click, switches between scroll and audio mode, toggles the scroll mode, or runs a shell command.
 
 **Run script mode**: Select "Run script" under Long press in the menu, then open **Configure Scripts...** to enter up to two shell commands. A regular long press runs the first command; holding Shift while long-pressing runs the second. Any command that works in Terminal works here — `open`, `osascript`, custom scripts, etc. This makes it easy to trigger two frequently-used actions (launching apps, running automations, controlling other tools) without any extra hardware.
 
@@ -56,7 +56,7 @@ The **click action** in audio mode is configurable via *Click in audio mode* in 
 
 The **VU Meter** (LED amplitude display) can be toggled independently of audio mode via its own menu item.
 
-**Long press** can also be configured to toggle between modes directly, which is handy if you switch often and prefer not to use the Fn key.
+**Long press** can also be configured to toggle between audio and scroll modes directly, which is handy if you switch often and prefer not to use the Fn key.
 
 | **Menu icon** | **Dock Icon** | **What it means** |
 |------------|---------|---------|
@@ -239,6 +239,10 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 - Apple IOKit HID: `IOHIDManager`, `IOHIDDeviceOpen`, `IOHIDDeviceRegisterInputReportCallback`
 
 ### Versions
+
+#### 1.0.15
+
+**Long press to switch scroll mode**: You can now configure the long press to switch between fine and coarse scrolling.
 
 #### 1.0.15
 

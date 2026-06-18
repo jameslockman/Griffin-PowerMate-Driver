@@ -136,6 +136,12 @@ driver.onLongPress = {
                 signalModeChange(toAudio: audioControlEnabled)
                 menuHandler.updateMenuState()
             }
+        case .toggleFineScroll:
+            DispatchQueue.main.async {
+                fineScrollEnabled.toggle()
+                defaults.set(fineScrollEnabled, forKey: kFineScroll)
+                menuHandler.updateMenuState()
+            }
         case .runScript:
             let command = NSEvent.modifierFlags.contains(.shift)
                 ? defaults.string(forKey: kScript2) ?? ""
