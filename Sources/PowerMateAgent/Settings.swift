@@ -14,6 +14,7 @@ let kScript1          = "script1"
 let kScript2          = "script2"
 let kAudioStepSwapped  = "audioStepSwapped"
 let kScrollAxesSwapped = "scrollAxesSwapped"
+let kFineScroll        = "fineScrollEnabled"
 
 // MARK: - Persistent state
 
@@ -25,6 +26,8 @@ var vuMeterEnabled      = defaults.object(forKey: kVUMeter) == nil ? true : defa
 var audioStepSwapped    = defaults.bool(forKey: kAudioStepSwapped)
 // When true, the default turn scrolls horizontally and Shift+turn scrolls vertically.
 var scrollAxesSwapped   = defaults.bool(forKey: kScrollAxesSwapped)
+// When true, each tick scrolls by 1 pixel instead of the default coarse step.
+var fineScrollEnabled   = defaults.bool(forKey: kFineScroll)
 
 // MARK: - Click action
 

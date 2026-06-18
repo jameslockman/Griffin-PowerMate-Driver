@@ -5,6 +5,7 @@ import AppKit
 
 final class MenuHandler: NSObject, NSMenuDelegate {
     var reverseScrollItem: NSMenuItem!
+    var fineScrollItem: NSMenuItem!
     var scrollAxesSwappedItem: NSMenuItem!
     var audioStepSwappedItem: NSMenuItem!
     var audioControlItem: NSMenuItem!
@@ -18,6 +19,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
 
     func updateMenuState() {
         reverseScrollItem.state       = scrollReversed ? .on : .off
+        fineScrollItem.state          = fineScrollEnabled ? .on : .off
         scrollAxesSwappedItem.state   = scrollAxesSwapped ? .on : .off
         audioStepSwappedItem.state    = audioStepSwapped ? .on : .off
         audioControlItem.state        = audioControlEnabled ? .on : .off
@@ -41,6 +43,12 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     @objc func toggleScrollReversed() {
         scrollReversed.toggle()
         defaults.set(scrollReversed, forKey: kScrollReversed)
+        updateMenuState()
+    }
+
+    @objc func toggleFineScroll() {
+        fineScrollEnabled.toggle()
+        defaults.set(fineScrollEnabled, forKey: kFineScroll)
         updateMenuState()
     }
 
@@ -138,11 +146,14 @@ final class MenuHandler: NSObject, NSMenuDelegate {
             ("Click in audio mode", " – Set the default action to Play/Pause or Mute/Unmute. Hold Shift to use the other action."),
             ("Prefer Fine volume in audio mode", " – Swap normal and fine volume steps in audio mode."),
             ("Reverse scroll direction", " – Reverses the scroll direction in scroll mode."),
+            ("Prefer Fine scrolling", " – Scroll by single-pixel increments instead of the default coarse step for precise control."),
             ("Long press", " – Right-click, double-click, toggle audio/scroll mode, or run a script.\n"),
             ("Modifiers:", ""),
             ("Fn + turn", " – Momentarily toggle between scroll and audio mode."),
             ("Shift + turn (audio mode)", " – Fine volume step (like Shift+Option+Volume keys)."),
             ("Shift + turn (scroll mode)", " – Scroll horizontally instead of vertically (swapped when \"Default to horizontal scroll\" is on)."),
+            ("Option + turn (scroll mode)", " – Toggle between fine and coarse scrolling."),
+            ("Shift + Option + turn (scroll mode)", " – Scroll on the alternate axis in fine mode."),
             ("Press + turn (audio or scroll mode)", " – Skip to next or previous track in the current media player."),
             ("Shift + click (audio mode)", " – Alternate between mute and play/pause.\n"),
             ("Configure Scripts", " – Sets shell commands for long press (and Shift+long press).\n"),
@@ -272,15 +283,24 @@ func buildMenu() {
     menuHandler.audioStepSwappedItem = audioStepSwappedItem
     menu.addItem(audioStepSwappedItem)
 
+    menu.addItem(NSMenuItem.separator())
+
     let reverseItem = NSMenuItem(title: "Reverse scroll direction", action: #selector(MenuHandler.toggleScrollReversed), keyEquivalent: "")
     reverseItem.target = menuHandler
     menuHandler.reverseScrollItem = reverseItem
     menu.addItem(reverseItem)
 
+    let fineScrollItem = NSMenuItem(title: "Prefer Fine scrolling", action: #selector(MenuHandler.toggleFineScroll), keyEquivalent: "")
+    fineScrollItem.target = menuHandler
+    menuHandler.fineScrollItem = fineScrollItem
+    menu.addItem(fineScrollItem)
+
     let scrollAxesSwappedItem = NSMenuItem(title: "Default to horizontal scroll", action: #selector(MenuHandler.toggleScrollAxesSwapped), keyEquivalent: "")
     scrollAxesSwappedItem.target = menuHandler
     menuHandler.scrollAxesSwappedItem = scrollAxesSwappedItem
     menu.addItem(scrollAxesSwappedItem)
+
+    menu.addItem(NSMenuItem.separator())
 
     let longPressMenu = NSMenu()
     let longPressRightItem = NSMenuItem(title: "Right-click", action: #selector(MenuHandler.setLongPressRightClick), keyEquivalent: "")

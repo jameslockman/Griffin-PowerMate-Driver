@@ -75,9 +75,15 @@ driver.onRotate = { delta, rate in
         let presses = fine ? 1 : abs(delta)
         adjustVolume(up: up, fine: fine, presses: presses)
     } else {
-        let shiftHeld = NSEvent.modifierFlags.contains(.shift)
+        let shiftHeld  = NSEvent.modifierFlags.contains(.shift)
+        let optionHeld = NSEvent.modifierFlags.contains(.option)
+        // Option toggles fine/coarse; fineScrollEnabled sets the default.
+        let fine = fineScrollEnabled != optionHeld
+        // Shift toggles horizontal/vertical; scrollAxesSwapped sets the default.
+        // Shift+Option: switch axis AND force fine mode.
         let horizontal = scrollAxesSwapped ? !shiftHeld : shiftHeld
-        postScroll(delta: delta, horizontal: horizontal)
+        let effectiveFine = (shiftHeld && optionHeld) ? true : fine
+        postScroll(delta: delta, horizontal: horizontal, fine: effectiveFine)
     }
 }
 

@@ -16,8 +16,9 @@ let kHIDEventSource = CGEventSource(stateID: .hidSystemState)
 // smooth scrolling rather than the discrete line jumps that .line units give.
 private let scrollPixelsPerStep: Int32 = 20
 
-func postScroll(delta: Int, horizontal: Bool = false) {
-    var pixels = Int32(delta) * scrollPixelsPerStep
+func postScroll(delta: Int, horizontal: Bool = false, fine: Bool = false) {
+    let step = fine ? Int32(1) : scrollPixelsPerStep
+    var pixels = Int32(delta) * step
     if scrollReversed { pixels = -pixels }
     let wheel1: Int32 = horizontal ? 0 : pixels
     let wheel2: Int32 = horizontal ? pixels : 0
