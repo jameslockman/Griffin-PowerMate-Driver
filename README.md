@@ -240,6 +240,18 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 
 ### Versions
 
+#### 1.1.0
+
+**Foreground-aware audio control and gestures**:
+
+- Turning controls Apple Music or Spotify volume when that player is in the foreground; other apps use smooth system-volume control.
+- Click controls Play/Pause and double-click skips to the next track, including when the active player is in the background.
+- Triple-click opens Apple Music.
+- Press and turn skips forward or backward through tracks.
+- Option + turn controls display brightness.
+- Long press opens Siri; a very long press (1.5 seconds) toggles the default microphone mute state when supported by the input device.
+- System volume uses a short 120 Hz easing ramp for smoother fine-grained changes.
+
 #### 1.0.16
 
 **Long press to switch scroll mode**: You can now configure the long press to switch between fine and coarse scrolling.

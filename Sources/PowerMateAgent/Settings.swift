@@ -19,7 +19,8 @@ let kFineScroll        = "fineScrollEnabled"
 // MARK: - Persistent state
 
 var scrollReversed      = defaults.bool(forKey: kScrollReversed)
-var audioControlEnabled = defaults.bool(forKey: kAudioControl)
+// The knob is a volume controller by default. Users can still toggle scroll mode.
+var audioControlEnabled = defaults.object(forKey: kAudioControl) == nil ? true : defaults.bool(forKey: kAudioControl)
 // VU meter defaults to true for existing users; only false if explicitly disabled.
 var vuMeterEnabled      = defaults.object(forKey: kVUMeter) == nil ? true : defaults.bool(forKey: kVUMeter)
 // When true, the default turn is fine step and Shift is standard step (swapped from default).
