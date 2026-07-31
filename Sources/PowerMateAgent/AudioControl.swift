@@ -32,12 +32,79 @@ func postMediaKey(_ keyType: Int32, keyDown: Bool, modifiers: NSEvent.ModifierFl
 
 // MARK: - Volume control
 
+private func scalarVolumeAddress(_ element: AudioObjectPropertyElement = kAudioObjectPropertyElementMain) -> AudioObjectPropertyAddress {
+    AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyVolumeScalar,
+                               mScope: kAudioDevicePropertyScopeOutput,
+                               mElement: element)
+}
+
+private func readSystemVolume() -> Float32? {
+    guard let device = outputDevice() else { return nil }
+    for element: AudioObjectPropertyElement in [kAudioObjectPropertyElementMain, 1] {
+        var address = scalarVolumeAddress(element)
+        var value: Float32 = 0
+        var size = UInt32(MemoryLayout<Float32>.size)
+        if AudioObjectGetPropertyData(device, &address, 0, nil, &size, &value) == noErr { return value }
+    }
+    return nil
+}
+
+private func writeSystemVolume(_ value: Float32) -> Bool {
+    guard let device = outputDevice() else { return false }
+    func write(_ element: AudioObjectPropertyElement) -> Bool {
+        var address = scalarVolumeAddress(element)
+        var settable = DarwinBoolean(false)
+        guard AudioObjectIsPropertySettable(device, &address, &settable) == noErr, settable.boolValue else { return false }
+        var next = min(1, max(0, value))
+        return AudioObjectSetPropertyData(device, &address, 0, nil, UInt32(MemoryLayout<Float32>.size), &next) == noErr
+    }
+    if write(kAudioObjectPropertyElementMain) { return true }
+    let left = write(1), right = write(2)
+    return left || right
+}
+
+private final class SystemVolumeSmoother {
+    private var timer: Timer?
+    private var current: Float32 = 0
+    private var target: Float32 = 0
+
+    func add(_ delta: Float32) -> Bool {
+        if timer == nil {
+            guard let actual = readSystemVolume() else { return false }
+            current = actual; target = actual
+        }
+        target = min(1, max(0, target + delta))
+        if timer == nil {
+            let t = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in self?.tick() }
+            RunLoop.main.add(t, forMode: .common); timer = t
+        }
+        return true
+    }
+
+    private func tick() {
+        let distance = target - current
+        if abs(distance) < 0.00002 {
+            current = target; _ = writeSystemVolume(current); timer?.invalidate(); timer = nil; return
+        }
+        current += distance * 0.28
+        _ = writeSystemVolume(current)
+    }
+}
+
+private let systemVolumeSmoother = SystemVolumeSmoother()
+
 // Posts NX volume key events — identical to the physical keyboard volume keys.
 // fine=false: standard step (~6.25%, same as F11/F12).
 // fine=true:  shift+option step (~1.5625%, same as Shift+Option+F11/F12).
 // Repeated presses for delta > 1 give velocity-proportional movement in normal mode.
 func adjustVolume(up: Bool, fine: Bool, presses: Int = 1) {
+    // Apple Music and Spotify have their own volume controls. If either is in
+    // the foreground, change that player immediately instead of system volume.
+    if adjustForegroundAppVolume(up: up, fine: fine, presses: presses) { return }
     if up && _isMuted { setMuted(false) }
+    let percent = fine ? 0.001 : 0.002
+    let amount = Float32(percent * Double(max(1, presses)))
+    if systemVolumeSmoother.add(up ? amount : -amount) { return }
     let keyType: Int32 = up ? 0 : 1  // NX_KEYTYPE_SOUND_UP / NX_KEYTYPE_SOUND_DOWN
     let modFlags: NSEvent.ModifierFlags = fine ? [.shift, .option] : []
     for _ in 0 ..< max(1, presses) {

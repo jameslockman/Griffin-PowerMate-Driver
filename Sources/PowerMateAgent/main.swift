@@ -46,10 +46,22 @@ driver.onRotate = { delta, rate in
         _didRotateWhileButtonDown = true
         _trackSkipAccumulator += delta
         while abs(_trackSkipAccumulator) >= kTrackSkipThreshold {
-            let keyType: Int32 = _trackSkipAccumulator > 0 ? 17 : 18  // NX_KEYTYPE_NEXT / NX_KEYTYPE_PREVIOUS
+            if _trackSkipAccumulator > 0 {
+                if !controlForegroundPlayer(nextTrack: true) {
+                    postMediaKey(17, keyDown: true); postMediaKey(17, keyDown: false)
+                }
+            } else if !controlForegroundPlayer(previousTrack: true) {
+                postMediaKey(18, keyDown: true); postMediaKey(18, keyDown: false)
+            }
+            _trackSkipAccumulator -= _trackSkipAccumulator > 0 ? kTrackSkipThreshold : -kTrackSkipThreshold
+        }
+        return
+    }
+    if NSEvent.modifierFlags.contains(.option) {
+        let keyType: Int32 = delta > 0 ? 2 : 3  // display brightness up/down
+        for _ in 0 ..< abs(delta) {
             postMediaKey(keyType, keyDown: true)
             postMediaKey(keyType, keyDown: false)
-            _trackSkipAccumulator -= _trackSkipAccumulator > 0 ? kTrackSkipThreshold : -kTrackSkipThreshold
         }
         return
     }
@@ -87,72 +99,63 @@ driver.onRotate = { delta, rate in
     }
 }
 
+private var pendingClickResolution: DispatchWorkItem?
+private var clickCount = 0
+private let multiClickInterval: TimeInterval = 0.28
+private var buttonDownStartedAt: CFAbsoluteTime?
+private let veryLongPressInterval: TimeInterval = 1.5
+
 driver.onClick = {
-    // Defer by one run-loop cycle so that any rotation in the same HID report is processed
-    // first (the driver handles button-change before rotation within each report block).
-    // This ensures _didRotateWhileButtonDown is set before we decide whether to act.
     DispatchQueue.main.async {
         guard !_didRotateWhileButtonDown else { return }
-        if useMenuBehavior() {
-            postKey(kReturnKey)
-            // Do not exit menu mode here: a submenu may open and we need to keep sending arrow keys.
-            // Menu mode will exit on the 5-second timeout when the user stops rotating.
-        } else if useAudioBehavior() {
-            let shiftHeld = NSEvent.modifierFlags.contains(.shift)
-            switch clickAction {
-            case .mute:      shiftHeld ? togglePlayPause() : toggleMute()
-            case .playPause: shiftHeld ? toggleMute()      : togglePlayPause()
-            }
-        } else {
-            exitMenuMode()
-            postMouseClick(button: .left)
+        pendingClickResolution?.cancel()
+        clickCount += 1
+        if clickCount >= 3 {
+            clickCount = 0
+            pendingClickResolution = nil
+            NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: "/System/Applications/Music.app"),
+                                               configuration: NSWorkspace.OpenConfiguration())
+            return
         }
+
+        let resolution = DispatchWorkItem {
+            let resolvedCount = clickCount
+            clickCount = 0
+            pendingClickResolution = nil
+            if resolvedCount == 1 {
+                if !controlForegroundPlayer(nextTrack: false) { togglePlayPause() }
+            } else if resolvedCount == 2, !controlForegroundPlayer(nextTrack: true) {
+                postMediaKey(17, keyDown: true)
+                postMediaKey(17, keyDown: false)
+            }
+        }
+        pendingClickResolution = resolution
+        DispatchQueue.main.asyncAfter(deadline: .now() + multiClickInterval, execute: resolution)
     }
 }
 
 driver.onLongPress = {
     DispatchQueue.main.async {
         guard !_didRotateWhileButtonDown else { return }
-        switch longPressAction {
-        case .rightClick:
-            enterMenuMode()
-            postMouseClick(button: .right)
-        case .doubleClick:
-            enterMenuMode()
-            DispatchQueue.main.async {
-                let cocoa = NSEvent.mouseLocation
-                let location = cocoaToQuartz(cocoa)
-                postDoubleClick(at: location)
-            }
-        case .toggleAudioMode:
-            DispatchQueue.main.async {
-                audioControlEnabled.toggle()
-                defaults.set(audioControlEnabled, forKey: kAudioControl)
-                if audioControlEnabled {
-                    if #available(macOS 14.2, *) { startAudioMeter() }
-                } else {
-                    stopAudioMeter()
-                }
-                signalModeChange(toAudio: audioControlEnabled)
-                menuHandler.updateMenuState()
-            }
-        case .toggleFineScroll:
-            DispatchQueue.main.async {
-                fineScrollEnabled.toggle()
-                defaults.set(fineScrollEnabled, forKey: kFineScroll)
-                menuHandler.updateMenuState()
-            }
-        case .runScript:
-            let command = NSEvent.modifierFlags.contains(.shift)
-                ? defaults.string(forKey: kScript2) ?? ""
-                : defaults.string(forKey: kScript1) ?? ""
-            runScript(command)
+        pendingClickResolution?.cancel()
+        pendingClickResolution = nil
+        clickCount = 0
+        let duration = CFAbsoluteTimeGetCurrent() - (buttonDownStartedAt ?? CFAbsoluteTimeGetCurrent())
+        if duration >= veryLongPressInterval {
+            toggleMicrophoneMute()
+            return
+        }
+        let siriURL = URL(fileURLWithPath: "/System/Applications/Siri.app")
+        let configuration = NSWorkspace.OpenConfiguration()
+        NSWorkspace.shared.openApplication(at: siriURL, configuration: configuration) { _, error in
+            if let error { NSLog("PowerMate: could not open Siri: %@", error.localizedDescription) }
         }
     }
 }
 
 driver.onButtonDown = {
     isButtonDown = true
+    buttonDownStartedAt = CFAbsoluteTimeGetCurrent()
     _didRotateWhileButtonDown = false
     _trackSkipAccumulator = 0
     setLEDOffMain(255)
@@ -160,6 +163,7 @@ driver.onButtonDown = {
 
 driver.onButtonUp = {
     isButtonDown = false
+    buttonDownStartedAt = nil
     if throbTimer != nil {
         lastRotationTime = CFAbsoluteTimeGetCurrent()
     } else {
