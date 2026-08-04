@@ -52,6 +52,8 @@ Enable **Default to horizontal scroll** in the menu to swap the axes — turning
 
 **Keypress mode**: instead of scrolling or adjusting volume, turning the knob can send a fully configurable keystroke. Enable **Keypress mode** in the menu, then open **Configure Keypress Mode...** to set the key sent for right-turn and left-turn — and, separately, what's sent when you hold **Shift**, **Option**, **Command**, or the PowerMate button while turning. Click a key field and press the key (with any modifiers held down) you want recorded — for example, holding Control-Option while pressing **{** records that whole combination.
 
+<img width="450"  alt="Script execution mode" src="/images/configureKeypress.png" />
+
 **Press and turn** — hold the button and turn the knob to skip tracks in the current media player. Turn clockwise to skip to the next track, counter-clockwise to go back. (In Keypress mode, this is replaced by whatever key you've configured for "Press + Turn".)
 
 The **click action** in audio mode is configurable via *Click in audio mode* in the menu. Choose **Mute/unmute** or **Play/Pause** as your primary action. Holding **Shift** while clicking activates the alternate action — so you can reach both without changing the menu setting.
@@ -62,14 +64,16 @@ The **VU Meter** (LED amplitude display) can be toggled independently of audio m
 
 **Configure Applications**: want different behavior in different apps? Open **Configure Applications...** in the menu, click **+**, and choose an app. Each configured app gets its own completely independent settings — mode, scroll/audio options, key bindings, and long-press action — which take over automatically whenever that app is in the foreground. Anything you haven't set for a given app falls back to your regular defaults.
 
+<img width="450"  alt="Script execution mode" src="/images/configureApplications.png" />
+
+**Notch-aware Dock icon**: On MacBooks with a camera notch, the menu bar icon can be pushed behind the camera housing when many items are present. PowerMate Agent detects this automatically and shows a Dock icon so you can still access the menu. The Dock icon reflects the same three states (not connected, scroll mode, audio mode) as the menu bar icon. It disappears from the Dock when the menu bar icon is visible again.
+
 | **Menu icon** | **Dock Icon** | **What it means** |
 |------------|---------|---------|
 | ![No PowerMate Connected menu icon](/images/noPowermate.png) | <img src="/images/DockIconDisconnected.png" alt="Device Unavailable" width="100"/> | No PowerMate connected to the computer. |
 | ![Scroll Mode active menu icon](/images/scrollMode.png) | <img src="/images/DockIconScroll.png" alt="Scroll Mode" width="100"/> | Scroll Mode active |
 | ![Audio Mode active menu icon](/images/audioMode.png) | <img src="/images/DockIconAudio.png" alt="Audio Mode" width="100"/> | Audio Mode active |
 
-
-**Notch-aware Dock icon**: On MacBooks with a camera notch, the menu bar icon can be pushed behind the camera housing when many items are present. PowerMate Agent detects this automatically and shows a Dock icon so you can still access the menu. The Dock icon reflects the same three states (not connected, scroll mode, audio mode) as the menu bar icon. It disappears from the Dock when the menu bar icon is visible again.
 
 All configuration choices (scroll direction, audio controls, keypress bindings, long-press action, and any per-application overrides) are saved automatically and restored the next time the app launches.
 
