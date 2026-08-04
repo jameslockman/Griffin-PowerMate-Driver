@@ -28,7 +28,7 @@ If the menu bar is hidden by the notch on a laptop display, then PowerMate Agent
 
 The PowerMate acts as a scroll control, so if the active window or control has a scroll option, turning the dial will scroll the window or increase/decrease selected value. You can reverse the scroll direction if you don't like the default scroll direction.
 
-The PowerMate can also act as a mouse button. A momentary push of the button acts as a mouse click when in scroll mode. A long-press of the button acts as a right-click. You can also change the behavior so that a long-press acts as a double-click, switches between scroll and audio mode, toggles the scroll mode, or runs a shell command.
+The PowerMate can also act as a mouse button. A momentary push of the button acts as a mouse click when in scroll mode. A long-press of the button acts as a right-click. You can also change the behavior so that a long-press acts as a left-click or double-click, toggles between two modes (**Toggle Mode**), toggles fine/coarse scrolling, or runs a shell command. Long press — like everything else described below — can be configured differently for specific applications; see **Configure Applications** further down.
 
 **Run script mode**: Select "Run script" under Long press in the menu, then open **Configure Scripts...** to enter up to two shell commands. A regular long press runs the first command; holding Shift while long-pressing runs the second. Any command that works in Terminal works here — `open`, `osascript`, custom scripts, etc. This makes it easy to trigger two frequently-used actions (launching apps, running automations, controlling other tools) without any extra hardware.
 
@@ -50,13 +50,17 @@ In **scroll mode**, turning the knob scrolls vertically and **Shift + turn** scr
 
 Enable **Default to horizontal scroll** in the menu to swap the axes — turning without a modifier scrolls horizontally, and Shift + turn scrolls vertically. **Reverse scroll direction** reverses whichever axis is currently active.
 
-**Press and turn** — hold the button and turn the knob to skip tracks in the current media player. Turn clockwise to skip to the next track, counter-clockwise to go back.
+**Keypress mode**: instead of scrolling or adjusting volume, turning the knob can send a fully configurable keystroke. Enable **Keypress mode** in the menu, then open **Configure Keypress Mode...** to set the key sent for right-turn and left-turn — and, separately, what's sent when you hold **Shift**, **Option**, **Command**, or the PowerMate button while turning. Click a key field and press the key (with any modifiers held down) you want recorded — for example, holding Control-Option while pressing **{** records that whole combination.
+
+**Press and turn** — hold the button and turn the knob to skip tracks in the current media player. Turn clockwise to skip to the next track, counter-clockwise to go back. (In Keypress mode, this is replaced by whatever key you've configured for "Press + Turn".)
 
 The **click action** in audio mode is configurable via *Click in audio mode* in the menu. Choose **Mute/unmute** or **Play/Pause** as your primary action. Holding **Shift** while clicking activates the alternate action — so you can reach both without changing the menu setting.
 
 The **VU Meter** (LED amplitude display) can be toggled independently of audio mode via its own menu item.
 
-**Long press** can also be configured to toggle between audio and scroll modes directly, which is handy if you switch often and prefer not to use the Fn key.
+**Long press** can also be configured to **Toggle Mode**, switching between any two of Scroll, Audio, and Keypress mode directly — handy if you switch often and prefer not to use the Fn key.
+
+**Configure Applications**: want different behavior in different apps? Open **Configure Applications...** in the menu, click **+**, and choose an app. Each configured app gets its own completely independent settings — mode, scroll/audio options, key bindings, and long-press action — which take over automatically whenever that app is in the foreground. Anything you haven't set for a given app falls back to your regular defaults.
 
 | **Menu icon** | **Dock Icon** | **What it means** |
 |------------|---------|---------|
@@ -67,7 +71,7 @@ The **VU Meter** (LED amplitude display) can be toggled independently of audio m
 
 **Notch-aware Dock icon**: On MacBooks with a camera notch, the menu bar icon can be pushed behind the camera housing when many items are present. PowerMate Agent detects this automatically and shows a Dock icon so you can still access the menu. The Dock icon reflects the same three states (not connected, scroll mode, audio mode) as the menu bar icon. It disappears from the Dock when the menu bar icon is visible again.
 
-All configuration choices (scroll direction, audio controls, long-press action) are saved automatically and restored the next time the app launches.
+All configuration choices (scroll direction, audio controls, keypress bindings, long-press action, and any per-application overrides) are saved automatically and restored the next time the app launches.
 
 On first launch, PowerMate Agent will prompt you to grant **Accessibility** permission. When you first enable audio controls, it will also prompt for **Audio Capture** permission. Both are required for full functionality.
 
@@ -129,18 +133,22 @@ With the PowerMate plugged in, turn the knob or press the button; the demo print
 
 **PowerMateAgent** turns the knob and button into keyboard/scroll events that **any application** receives (browser, editor, etc.):
 
-- **Rotation** → vertical scroll (or horizontal when **Default to horizontal scroll** is enabled), or **Up/Down arrow keys** when a menu (or submenu) is focused, or **system volume** in audio control mode (standard step; hold **Shift** for fine step; hold **Fn** to temporarily flip modes). Hold **Shift** to scroll the alternate axis in scroll mode.
-- **Press and turn** → skip to the next or previous track in the current media player.
-- **Click** (short press) → **left mouse button** (at cursor), or **Return** when a menu is focused (chooses the highlighted item), or **mute/unmute / play/pause** in audio control mode (configurable; Shift alternates between the two actions).
-- **Long press** → **right mouse button**, or configurable to double-click, **toggle audio/scroll mode**, or **run a shell script**.
+- **Rotation** → vertical scroll (or horizontal when **Default to horizontal scroll** is enabled), or **Up/Down arrow keys** when a menu (or submenu) is focused, or **system volume** in Audio mode (standard step; hold **Shift** for fine step; hold **Fn** to temporarily flip modes), or a **configurable keystroke** in Keypress mode (separate bindings for plain turn, Shift, Option, Command, and Press+turn). Hold **Shift** to scroll the alternate axis in Scroll mode.
+- **Press and turn** → skip to the next or previous track in the current media player (Scroll/Audio mode), or send the configured "Press + Turn" key (Keypress mode).
+- **Click** (short press) → **left mouse button** (at cursor), or **Return** when a menu is focused (chooses the highlighted item), or **mute/unmute / play/pause** in Audio mode (configurable; Shift alternates between the two actions).
+- **Long press** → **right-click**, **left-click**, **double-click**, **Toggle Mode** (switches between any two of Scroll/Audio/Keypress), **toggle fine/coarse scrolling**, or **run a shell script**.
 
 **Menu detection** uses the Accessibility API: when the focused UI element is a menu or submenu, rotation sends arrow keys and click sends Return. A long-press also enters a fallback “menu mode” (arrow keys until click or 5-second timeout) if Accessibility is not enabled.
 
 **Audio mode** — enable “Audio mode” in the menu, hold **Fn** to temporarily flip, or configure long press to toggle. A “Tink” plays when entering audio mode; a “Pop” plays when returning to scroll. Fn always XORs the current mode without a sound cue since it's held, not toggled.
 
+**Keypress mode** — enable “Keypress mode” in the menu and rotation sends a configurable key instead of scrolling; see **Configure Keypress Mode...** for the 10 bindings (right/left turn × plain/press/Shift/Option/Command), each capable of carrying its own modifier flags baked into the synthesized keystroke.
+
+**Per-application overrides** — **Configure Applications...** lets you give a specific app (matched by bundle identifier) a fully independent set of settings — mode, scroll/audio options, keypress bindings, and long-press action — that take effect only while that app is frontmost, falling back to your defaults otherwise.
+
 **LED VU meter** — when audio control mode is active, the LED brightness tracks the RMS amplitude of the system audio output in real time using `AudioHardwareCreateProcessTap`.
 
-**Persistent settings** — scroll direction, audio mode, and long-press action are remembered across launches.
+**Persistent settings** — scroll direction, audio/keypress options, keypress bindings, long-press action, and per-application overrides are all remembered across launches.
 
 The LED throbs while you turn and goes dim when idle; full brightness while the button is held.
 
@@ -239,6 +247,16 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 - Apple IOKit HID: `IOHIDManager`, `IOHIDDeviceOpen`, `IOHIDDeviceRegisterInputReportCallback`
 
 ### Versions
+
+#### 1.0.17
+
+**Keypress mode**: turning the knob can now send a fully configurable keystroke instead of scrolling. Right-turn and left-turn each have their own key, with separate bindings for holding Shift, Option, Command, or the PowerMate button while turning. Configure keys via **Configure Keypress Mode...** — when recording a key you can hold Control/Option/Shift/Command to bake them into the combo (e.g. Control-Option-{ or Command-Shift-Q).
+
+**Configure Applications**: give specific applications their own fully independent behavior via the new **Configure Applications...** window. Add an app, then set its own mode (Scroll/Audio/Keypress), scroll/audio settings, key bindings, and long-press action — active only while that app is in the foreground, falling back to your defaults otherwise.
+
+**Scroll mode** is now its own menu item alongside Audio mode and Keypress mode, so all three modes are directly selectable from the menu.
+
+**Long press improvements**: added **Left-click** as a long-press option, and generalized "Toggle audio/scroll mode" into **Toggle Mode**, which now switches between any two of the three modes — Audio/Scroll, Audio/Keypress, or Scroll/Keypress. Long press is also configurable per application in Configure Applications.
 
 #### 1.0.16
 

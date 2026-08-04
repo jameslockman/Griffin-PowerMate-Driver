@@ -8,30 +8,40 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     var fineScrollItem: NSMenuItem!
     var scrollAxesSwappedItem: NSMenuItem!
     var audioStepSwappedItem: NSMenuItem!
+    var scrollModeItem: NSMenuItem!
     var audioControlItem: NSMenuItem!
+    var keypressModeItem: NSMenuItem!
     var clickMuteItem: NSMenuItem!
     var clickPlayPauseItem: NSMenuItem!
     var vuMeterItem: NSMenuItem!
     var longPressRightItem: NSMenuItem!
+    var longPressLeftItem: NSMenuItem!
     var longPressDoubleItem: NSMenuItem!
-    var longPressToggleAudioItem: NSMenuItem!
+    var longPressToggleAudioScrollItem: NSMenuItem!
+    var longPressToggleAudioKeypressItem: NSMenuItem!
+    var longPressToggleScrollKeypressItem: NSMenuItem!
     var longPressFineScrollItem: NSMenuItem!
     var longPressRunScriptItem: NSMenuItem!
 
     func updateMenuState() {
-        reverseScrollItem.state       = scrollReversed ? .on : .off
-        fineScrollItem.state          = fineScrollEnabled ? .on : .off
-        scrollAxesSwappedItem.state   = scrollAxesSwapped ? .on : .off
-        audioStepSwappedItem.state    = audioStepSwapped ? .on : .off
-        audioControlItem.state        = audioControlEnabled ? .on : .off
-        clickMuteItem.state           = (clickAction == .mute) ? .on : .off
-        clickPlayPauseItem.state      = (clickAction == .playPause) ? .on : .off
+        reverseScrollItem.state       = defaultSettings.scrollReversed ? .on : .off
+        fineScrollItem.state          = defaultSettings.fineScrollEnabled ? .on : .off
+        scrollAxesSwappedItem.state   = defaultSettings.scrollAxesSwapped ? .on : .off
+        audioStepSwappedItem.state    = defaultSettings.audioStepSwapped ? .on : .off
+        scrollModeItem.state          = defaultSettings.mode == .scroll ? .on : .off
+        audioControlItem.state        = defaultSettings.mode == .audio ? .on : .off
+        keypressModeItem.state        = defaultSettings.mode == .keypress ? .on : .off
+        clickMuteItem.state           = (defaultSettings.clickAction == .mute) ? .on : .off
+        clickPlayPauseItem.state      = (defaultSettings.clickAction == .playPause) ? .on : .off
         vuMeterItem.state             = vuMeterEnabled ? .on : .off
-        longPressRightItem.state      = (longPressAction == .rightClick) ? .on : .off
-        longPressDoubleItem.state     = (longPressAction == .doubleClick) ? .on : .off
-        longPressToggleAudioItem.state  = (longPressAction == .toggleAudioMode) ? .on : .off
-        longPressFineScrollItem.state   = (longPressAction == .toggleFineScroll) ? .on : .off
-        longPressRunScriptItem.state    = (longPressAction == .runScript) ? .on : .off
+        longPressRightItem.state               = (defaultSettings.longPressAction == .rightClick) ? .on : .off
+        longPressLeftItem.state                = (defaultSettings.longPressAction == .leftClick) ? .on : .off
+        longPressDoubleItem.state              = (defaultSettings.longPressAction == .doubleClick) ? .on : .off
+        longPressToggleAudioScrollItem.state    = (defaultSettings.longPressAction == .toggleMode(.audioScroll)) ? .on : .off
+        longPressToggleAudioKeypressItem.state  = (defaultSettings.longPressAction == .toggleMode(.audioKeypress)) ? .on : .off
+        longPressToggleScrollKeypressItem.state = (defaultSettings.longPressAction == .toggleMode(.scrollKeypress)) ? .on : .off
+        longPressFineScrollItem.state           = (defaultSettings.longPressAction == .toggleFineScroll) ? .on : .off
+        longPressRunScriptItem.state            = (defaultSettings.longPressAction == .runScript) ? .on : .off
         updateStatusIcon()
         updateDockIcon()
     }
@@ -43,57 +53,83 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     // MARK: - Toggle actions
 
     @objc func toggleScrollReversed() {
-        scrollReversed.toggle()
-        defaults.set(scrollReversed, forKey: kScrollReversed)
+        defaultSettings.scrollReversed.toggle()
+        saveDefaultSettings()
         updateMenuState()
     }
 
     @objc func toggleFineScroll() {
-        fineScrollEnabled.toggle()
-        defaults.set(fineScrollEnabled, forKey: kFineScroll)
+        defaultSettings.fineScrollEnabled.toggle()
+        saveDefaultSettings()
         updateMenuState()
     }
 
     @objc func toggleScrollAxesSwapped() {
-        scrollAxesSwapped.toggle()
-        defaults.set(scrollAxesSwapped, forKey: kScrollAxesSwapped)
+        defaultSettings.scrollAxesSwapped.toggle()
+        saveDefaultSettings()
         updateMenuState()
     }
 
     @objc func toggleAudioStepSwapped() {
-        audioStepSwapped.toggle()
-        defaults.set(audioStepSwapped, forKey: kAudioStepSwapped)
+        defaultSettings.audioStepSwapped.toggle()
+        saveDefaultSettings()
         updateMenuState()
+    }
+
+    /// Switches the default mode. Scroll/Audio/Keypress are mutually exclusive, so entering
+    /// one leaves whichever of the others was active (stopping the audio meter if it was on).
+    private func setDefaultMode(_ mode: RotationMode) {
+        guard defaultSettings.mode != mode else { return }
+        if defaultSettings.mode == .audio { stopAudioMeter() }
+        defaultSettings.mode = mode
+        if mode == .audio, #available(macOS 14.2, *) { startAudioMeter() }
+        saveDefaultSettings()
+        updateMenuState()
+    }
+
+    @objc func selectScrollMode() {
+        let wasAudio = defaultSettings.mode == .audio
+        setDefaultMode(.scroll)
+        if wasAudio { signalModeChange(toAudio: false) }
     }
 
     @objc func toggleAudioControl() {
-        audioControlEnabled.toggle()
-        defaults.set(audioControlEnabled, forKey: kAudioControl)
-        if audioControlEnabled {
-            if #available(macOS 14.2, *) { startAudioMeter() }
-        } else {
-            stopAudioMeter()
+        let goingToAudio = defaultSettings.mode != .audio
+        setDefaultMode(goingToAudio ? .audio : .scroll)
+        signalModeChange(toAudio: goingToAudio)
+    }
+
+    @objc func toggleKeypressMode() {
+        setDefaultMode(defaultSettings.mode == .keypress ? .scroll : .keypress)
+    }
+
+    @objc func configureKeypressMode() {
+        if let updated = showConfigureKeypressMode(for: defaultSettings) {
+            defaultSettings = updated
+            saveDefaultSettings()
         }
-        signalModeChange(toAudio: audioControlEnabled)
-        updateMenuState()
+    }
+
+    @objc func configureApplications() {
+        showAppOverridesWindow()
     }
 
     @objc func setClickMute() {
-        clickAction = .mute
-        defaults.set("mute", forKey: kClickAction)
+        defaultSettings.clickAction = .mute
+        saveDefaultSettings()
         updateMenuState()
     }
 
     @objc func setClickPlayPause() {
-        clickAction = .playPause
-        defaults.set("playPause", forKey: kClickAction)
+        defaultSettings.clickAction = .playPause
+        saveDefaultSettings()
         updateMenuState()
     }
 
     @objc func toggleVUMeter() {
         vuMeterEnabled.toggle()
         defaults.set(vuMeterEnabled, forKey: kVUMeter)
-        if audioControlEnabled {
+        if defaultSettings.mode == .audio {
             if vuMeterEnabled {
                 if #available(macOS 14.2, *) { startAudioMeter() }
             } else {
@@ -104,35 +140,20 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         updateMenuState()
     }
 
-    @objc func setLongPressRightClick() {
-        longPressAction = .rightClick
-        defaults.set("rightClick", forKey: kLongPressAction)
+    private func setLongPressAction(_ action: LongPressAction) {
+        defaultSettings.longPressAction = action
+        saveDefaultSettings()
         updateMenuState()
     }
 
-    @objc func setLongPressDoubleClick() {
-        longPressAction = .doubleClick
-        defaults.set("doubleClick", forKey: kLongPressAction)
-        updateMenuState()
-    }
-
-    @objc func setLongPressToggleAudio() {
-        longPressAction = .toggleAudioMode
-        defaults.set("toggleAudioMode", forKey: kLongPressAction)
-        updateMenuState()
-    }
-
-    @objc func setLongPressFineScroll() {
-        longPressAction = .toggleFineScroll
-        defaults.set("toggleFineScroll", forKey: kLongPressAction)
-        updateMenuState()
-    }
-
-    @objc func setLongPressRunScript() {
-        longPressAction = .runScript
-        defaults.set("runScript", forKey: kLongPressAction)
-        updateMenuState()
-    }
+    @objc func setLongPressRightClick()          { setLongPressAction(.rightClick) }
+    @objc func setLongPressLeftClick()           { setLongPressAction(.leftClick) }
+    @objc func setLongPressDoubleClick()         { setLongPressAction(.doubleClick) }
+    @objc func setLongPressToggleAudioScroll()    { setLongPressAction(.toggleMode(.audioScroll)) }
+    @objc func setLongPressToggleAudioKeypress()  { setLongPressAction(.toggleMode(.audioKeypress)) }
+    @objc func setLongPressToggleScrollKeypress() { setLongPressAction(.toggleMode(.scrollKeypress)) }
+    @objc func setLongPressFineScroll()          { setLongPressAction(.toggleFineScroll) }
+    @objc func setLongPressRunScript()           { setLongPressAction(.runScript) }
 
     @objc func configureScripts() {
         showConfigureScripts()
@@ -149,13 +170,14 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     @objc func showHelp() {
         let lines: [(String, String)] = [
             ("", "PowerMate Agent runs in the background and turns the PowerMate into a scroll wheel or volume control.\n"),
-            ("Audio mode", " – Enable in the menu to use the PowerMate as a volume control. Otherwise it acts as a scroll wheel."),
+            ("Scroll mode, Audio mode, Keypress mode", " – Mutually exclusive: pick one to set what turning the PowerMate does by default."),
             ("VU Meter", " – Pulse the blue LED in time with your audio stream."),
             ("Click in audio mode", " – Set the default action to Play/Pause or Mute/Unmute. Hold Shift to use the other action."),
             ("Prefer Fine volume in audio mode", " – Swap normal and fine volume steps in audio mode."),
             ("Reverse scroll direction", " – Reverses the scroll direction in scroll mode."),
             ("Prefer Fine scrolling", " – Scroll by single-pixel increments instead of the default coarse step for precise control."),
-            ("Long press", " – Right-click, double-click, toggle audio/scroll mode, toggle fine/coarse scrolling, or run a script.\n"),
+            ("Keypress mode", " – Turning sends a configured keystroke instead of scrolling (disables Audio mode). Configure the keys, including Shift/Option/Command/Press variants, via \"Configure Keypress Mode...\".\n"),
+            ("Long press", " – Right-click, left-click, double-click, toggle between two modes (Audio/Scroll, Audio/Keypress, or Scroll/Keypress), toggle fine/coarse scrolling, or run a script. Configurable per app in \"Configure Applications...\".\n"),
             ("Modifiers:", ""),
             ("Fn + turn", " – Momentarily toggle between scroll and audio mode."),
             ("Shift + turn (audio mode)", " – Fine volume step (like Shift+Option+Volume keys)."),
@@ -165,6 +187,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
             ("Press + turn (audio or scroll mode)", " – Skip to next or previous track in the current media player."),
             ("Shift + click (audio mode)", " – Alternate between mute and play/pause.\n"),
             ("Configure Scripts", " – Sets shell commands for long press (and Shift+long press).\n"),
+            ("Configure Applications", " – Override the mode and its settings for specific apps, independent of the defaults above. Add an app, then set its mode (Scroll/Audio/Keypress) and behavior.\n"),
             ("Feedback/bug report", " - Let us know if you have any issues or suggestions."),
         ]
 
@@ -293,6 +316,22 @@ func buildMenu() {
 
     menu.addItem(NSMenuItem.separator())
 
+    let keypressModeItem = NSMenuItem(title: "Keypress mode", action: #selector(MenuHandler.toggleKeypressMode), keyEquivalent: "")
+    keypressModeItem.target = menuHandler
+    menuHandler.keypressModeItem = keypressModeItem
+    menu.addItem(keypressModeItem)
+
+    let configKeypressItem = NSMenuItem(title: "Configure Keypress Mode...", action: #selector(MenuHandler.configureKeypressMode), keyEquivalent: "")
+    configKeypressItem.target = menuHandler
+    menu.addItem(configKeypressItem)
+
+    menu.addItem(NSMenuItem.separator())
+
+    let scrollModeItem = NSMenuItem(title: "Scroll mode", action: #selector(MenuHandler.selectScrollMode), keyEquivalent: "")
+    scrollModeItem.target = menuHandler
+    menuHandler.scrollModeItem = scrollModeItem
+    menu.addItem(scrollModeItem)
+
     let reverseItem = NSMenuItem(title: "Reverse scroll direction", action: #selector(MenuHandler.toggleScrollReversed), keyEquivalent: "")
     reverseItem.target = menuHandler
     menuHandler.reverseScrollItem = reverseItem
@@ -315,14 +354,32 @@ func buildMenu() {
     longPressRightItem.target = menuHandler
     menuHandler.longPressRightItem = longPressRightItem
     longPressMenu.addItem(longPressRightItem)
+    let longPressLeftItem = NSMenuItem(title: "Left-click", action: #selector(MenuHandler.setLongPressLeftClick), keyEquivalent: "")
+    longPressLeftItem.target = menuHandler
+    menuHandler.longPressLeftItem = longPressLeftItem
+    longPressMenu.addItem(longPressLeftItem)
     let longPressDoubleItem = NSMenuItem(title: "Double-click", action: #selector(MenuHandler.setLongPressDoubleClick), keyEquivalent: "")
     longPressDoubleItem.target = menuHandler
     menuHandler.longPressDoubleItem = longPressDoubleItem
     longPressMenu.addItem(longPressDoubleItem)
-    let longPressToggleAudioItem = NSMenuItem(title: "Toggle audio/scroll mode", action: #selector(MenuHandler.setLongPressToggleAudio), keyEquivalent: "")
-    longPressToggleAudioItem.target = menuHandler
-    menuHandler.longPressToggleAudioItem = longPressToggleAudioItem
-    longPressMenu.addItem(longPressToggleAudioItem)
+
+    let toggleModeMenu = NSMenu()
+    let toggleAudioScrollItem = NSMenuItem(title: ModeTogglePair.audioScroll.title, action: #selector(MenuHandler.setLongPressToggleAudioScroll), keyEquivalent: "")
+    toggleAudioScrollItem.target = menuHandler
+    menuHandler.longPressToggleAudioScrollItem = toggleAudioScrollItem
+    toggleModeMenu.addItem(toggleAudioScrollItem)
+    let toggleAudioKeypressItem = NSMenuItem(title: ModeTogglePair.audioKeypress.title, action: #selector(MenuHandler.setLongPressToggleAudioKeypress), keyEquivalent: "")
+    toggleAudioKeypressItem.target = menuHandler
+    menuHandler.longPressToggleAudioKeypressItem = toggleAudioKeypressItem
+    toggleModeMenu.addItem(toggleAudioKeypressItem)
+    let toggleScrollKeypressItem = NSMenuItem(title: ModeTogglePair.scrollKeypress.title, action: #selector(MenuHandler.setLongPressToggleScrollKeypress), keyEquivalent: "")
+    toggleScrollKeypressItem.target = menuHandler
+    menuHandler.longPressToggleScrollKeypressItem = toggleScrollKeypressItem
+    toggleModeMenu.addItem(toggleScrollKeypressItem)
+    let toggleModeSub = NSMenuItem(title: "Toggle Mode", action: nil, keyEquivalent: "")
+    toggleModeSub.submenu = toggleModeMenu
+    longPressMenu.addItem(toggleModeSub)
+
     let longPressFineScrollItem = NSMenuItem(title: "Toggle fine/coarse scrolling", action: #selector(MenuHandler.setLongPressFineScroll), keyEquivalent: "")
     longPressFineScrollItem.target = menuHandler
     menuHandler.longPressFineScrollItem = longPressFineScrollItem
@@ -340,6 +397,10 @@ func buildMenu() {
     let configScriptsItem = NSMenuItem(title: "Configure Scripts...", action: #selector(MenuHandler.configureScripts), keyEquivalent: "")
     configScriptsItem.target = menuHandler
     menu.addItem(configScriptsItem)
+
+    let configAppsItem = NSMenuItem(title: "Configure Applications...", action: #selector(MenuHandler.configureApplications), keyEquivalent: "")
+    configAppsItem.target = menuHandler
+    menu.addItem(configAppsItem)
 
     menu.addItem(updateAvailableItem)
 

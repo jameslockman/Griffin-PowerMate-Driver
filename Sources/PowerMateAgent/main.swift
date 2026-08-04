@@ -42,8 +42,16 @@ private let kTrackSkipThreshold = 5
 driver.onRotate = { delta, rate in
     lastRotationTime = CFAbsoluteTimeGetCurrent()
     startThrob()
+    // Resolved once per event: the frontmost app's override, or the global default.
+    let settings = currentSettings()
     if isButtonDown {
         _didRotateWhileButtonDown = true
+        // In Keypress mode, holding the button while turning sends the configured
+        // "Press + Turn" key instead of the default track-skip behavior.
+        if settings.mode == .keypress {
+            postTurnKeypress(delta: delta, slot: .press, settings: settings)
+            return
+        }
         _trackSkipAccumulator += delta
         while abs(_trackSkipAccumulator) >= kTrackSkipThreshold {
             let keyType: Int32 = _trackSkipAccumulator > 0 ? 17 : 18  // NX_KEYTYPE_NEXT / NX_KEYTYPE_PREVIOUS
@@ -64,26 +72,32 @@ driver.onRotate = { delta, rate in
             menuModeTimeout = work
             DispatchQueue.main.asyncAfter(deadline: .now() + menuModeTimeoutInterval, execute: work)
         }
-    } else if useAudioBehavior() {
+    } else if useAudioBehavior(mode: settings.mode) {
         let shiftHeld = NSEvent.modifierFlags.contains(.shift)
         // audioStepSwapped flips the default: normally no-modifier=standard, Shift=fine;
         // when swapped, no-modifier=fine, Shift=standard.
-        let fine = audioStepSwapped ? !shiftHeld : shiftHeld
+        let fine = settings.audioStepSwapped ? !shiftHeld : shiftHeld
         let up = delta > 0
         // fine mode: one fine step per tick regardless of velocity.
         // standard mode: abs(delta) presses so faster spinning moves volume faster.
         let presses = fine ? 1 : abs(delta)
         adjustVolume(up: up, fine: fine, presses: presses)
+    } else if useKeypressBehavior(mode: settings.mode) {
+        let shiftHeld   = NSEvent.modifierFlags.contains(.shift)
+        let optionHeld  = NSEvent.modifierFlags.contains(.option)
+        let commandHeld = NSEvent.modifierFlags.contains(.command)
+        let slot: TurnSlot = commandHeld ? .command : optionHeld ? .option : shiftHeld ? .shift : .plain
+        postTurnKeypress(delta: delta, slot: slot, settings: settings)
     } else {
         let shiftHeld  = NSEvent.modifierFlags.contains(.shift)
         let optionHeld = NSEvent.modifierFlags.contains(.option)
         // Option toggles fine/coarse; fineScrollEnabled sets the default.
-        let fine = fineScrollEnabled != optionHeld
+        let fine = settings.fineScrollEnabled != optionHeld
         // Shift toggles horizontal/vertical; scrollAxesSwapped sets the default.
         // Shift+Option: switch axis AND force fine mode.
-        let horizontal = scrollAxesSwapped ? !shiftHeld : shiftHeld
+        let horizontal = settings.scrollAxesSwapped ? !shiftHeld : shiftHeld
         let effectiveFine = (shiftHeld && optionHeld) ? true : fine
-        postScroll(delta: delta, horizontal: horizontal, fine: effectiveFine)
+        postScroll(delta: delta, horizontal: horizontal, fine: effectiveFine, reversed: settings.scrollReversed)
     }
 }
 
@@ -93,13 +107,14 @@ driver.onClick = {
     // This ensures _didRotateWhileButtonDown is set before we decide whether to act.
     DispatchQueue.main.async {
         guard !_didRotateWhileButtonDown else { return }
+        let settings = currentSettings()
         if useMenuBehavior() {
             postKey(kReturnKey)
             // Do not exit menu mode here: a submenu may open and we need to keep sending arrow keys.
             // Menu mode will exit on the 5-second timeout when the user stops rotating.
-        } else if useAudioBehavior() {
+        } else if useAudioBehavior(mode: settings.mode) {
             let shiftHeld = NSEvent.modifierFlags.contains(.shift)
-            switch clickAction {
+            switch settings.clickAction {
             case .mute:      shiftHeld ? togglePlayPause() : toggleMute()
             case .playPause: shiftHeld ? toggleMute()      : togglePlayPause()
             }
@@ -113,10 +128,14 @@ driver.onClick = {
 driver.onLongPress = {
     DispatchQueue.main.async {
         guard !_didRotateWhileButtonDown else { return }
-        switch longPressAction {
+        // The action itself is resolved per-app (frontmost app's override, or the default).
+        switch currentSettings().longPressAction {
         case .rightClick:
             enterMenuMode()
             postMouseClick(button: .right)
+        case .leftClick:
+            enterMenuMode()
+            postMouseClick(button: .left)
         case .doubleClick:
             enterMenuMode()
             DispatchQueue.main.async {
@@ -124,22 +143,29 @@ driver.onLongPress = {
                 let location = cocoaToQuartz(cocoa)
                 postDoubleClick(at: location)
             }
-        case .toggleAudioMode:
+        case .toggleMode(let pair):
             DispatchQueue.main.async {
-                audioControlEnabled.toggle()
-                defaults.set(audioControlEnabled, forKey: kAudioControl)
-                if audioControlEnabled {
-                    if #available(macOS 14.2, *) { startAudioMeter() }
-                } else {
-                    stopAudioMeter()
+                // The audio meter follows defaultSettings.mode specifically, so only touch it
+                // if this mutation actually changed the default (i.e. the frontmost app has no
+                // override of its own) — leave it alone when only a per-app override changed.
+                let audioWasOn = defaultSettings.mode == .audio
+                mutateCurrentSettings { settings in
+                    settings.mode = toggledMode(current: settings.mode, pair: pair)
                 }
-                signalModeChange(toAudio: audioControlEnabled)
+                let audioIsOn = defaultSettings.mode == .audio
+                if audioIsOn != audioWasOn {
+                    if audioIsOn {
+                        if #available(macOS 14.2, *) { startAudioMeter() }
+                    } else {
+                        stopAudioMeter()
+                    }
+                    signalModeChange(toAudio: audioIsOn)
+                }
                 menuHandler.updateMenuState()
             }
         case .toggleFineScroll:
             DispatchQueue.main.async {
-                fineScrollEnabled.toggle()
-                defaults.set(fineScrollEnabled, forKey: kFineScroll)
+                mutateCurrentSettings { $0.fineScrollEnabled.toggle() }
                 menuHandler.updateMenuState()
             }
         case .runScript:
@@ -187,7 +213,7 @@ DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
         setLEDOffMain(80)
     }
     // Restore audio meter if audio mode was saved as enabled from a previous session.
-    if audioControlEnabled {
+    if defaultSettings.mode == .audio {
         if #available(macOS 14.2, *) { startAudioMeter() }
     }
     // Check for a newer release in the background; shows a menu item if one is found.
@@ -232,7 +258,7 @@ wsCenter.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: n
 }
 wsCenter.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { _ in
     driver.start()
-    if audioControlEnabled {
+    if defaultSettings.mode == .audio {
         if #available(macOS 14.2, *) { startAudioMeter() }
     }
 }
