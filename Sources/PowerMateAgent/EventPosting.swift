@@ -16,10 +16,10 @@ let kHIDEventSource = CGEventSource(stateID: .hidSystemState)
 // smooth scrolling rather than the discrete line jumps that .line units give.
 private let scrollPixelsPerStep: Int32 = 20
 
-func postScroll(delta: Int, horizontal: Bool = false, fine: Bool = false) {
+func postScroll(delta: Int, horizontal: Bool = false, fine: Bool = false, reversed: Bool = false) {
     let step = fine ? Int32(1) : scrollPixelsPerStep
     var pixels = Int32(delta) * step
-    if scrollReversed { pixels = -pixels }
+    if reversed { pixels = -pixels }
     let wheel1: Int32 = horizontal ? 0 : pixels
     let wheel2: Int32 = horizontal ? pixels : 0
     guard let event = CGEvent(
@@ -41,10 +41,12 @@ let kUpArrow: CGKeyCode   = 0x7E
 let kDownArrow: CGKeyCode = 0x7D
 let kReturnKey: CGKeyCode = 0x24
 
-/// Post one key press (down + up).
-func postKey(_ keyCode: CGKeyCode) {
+/// Post one key press (down + up), optionally with modifier flags held (e.g. Control+Option).
+func postKey(_ keyCode: CGKeyCode, flags: CGEventFlags = []) {
     guard let down = CGEvent(keyboardEventSource: kHIDEventSource, virtualKey: keyCode, keyDown: true),
           let up   = CGEvent(keyboardEventSource: kHIDEventSource, virtualKey: keyCode, keyDown: false) else { return }
+    down.flags = flags
+    up.flags = flags
     down.post(tap: .cghidEventTap)
     up.post(tap: .cghidEventTap)
 }
@@ -64,6 +66,10 @@ func postMouseClick(at location: CGPoint, button: CGMouseButton = .left) {
     let upType: CGEventType   = button == .left ? .leftMouseUp   : .rightMouseUp
     if let down = CGEvent(mouseEventSource: kHIDEventSource, mouseType: downType, mouseCursorPosition: location, mouseButton: button),
        let up   = CGEvent(mouseEventSource: kHIDEventSource, mouseType: upType,   mouseCursorPosition: location, mouseButton: button) {
+        // Real clicks always carry a clickState >= 1; some apps' event routing doesn't
+        // expect the field to be left at its unset default.
+        down.setIntegerValueField(.mouseEventClickState, value: 1)
+        up.setIntegerValueField(.mouseEventClickState, value: 1)
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
     }
@@ -76,6 +82,8 @@ func postDoubleClick(at location: CGPoint) {
           let up1   = CGEvent(mouseEventSource: kHIDEventSource, mouseType: .leftMouseUp,   mouseCursorPosition: location, mouseButton: .left),
           let down2 = CGEvent(mouseEventSource: kHIDEventSource, mouseType: .leftMouseDown, mouseCursorPosition: location, mouseButton: .left),
           let up2   = CGEvent(mouseEventSource: kHIDEventSource, mouseType: .leftMouseUp,   mouseCursorPosition: location, mouseButton: .left) else { return }
+    down1.setIntegerValueField(.mouseEventClickState, value: 1)
+    up1.setIntegerValueField(.mouseEventClickState, value: 1)
     down1.post(tap: .cghidEventTap)
     up1.post(tap: .cghidEventTap)
     down2.setIntegerValueField(.mouseEventClickState, value: 2)

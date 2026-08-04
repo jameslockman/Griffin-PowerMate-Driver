@@ -25,7 +25,7 @@ func makeDockIcon() -> NSImage? {
             .applying(NSImage.SymbolConfiguration(pointSize: 96, weight: .regular))
         return NSImage(systemSymbolName: "circle", accessibilityDescription: nil)?
             .withSymbolConfiguration(config)
-    } else if audioControlEnabled {
+    } else if defaultSettings.mode == .audio {
         if let img = loadBundleIcon("DockIconAudio") { return img }
         let config = NSImage.SymbolConfiguration(paletteColors: [.labelColor, .systemBlue])
             .applying(NSImage.SymbolConfiguration(pointSize: 96, weight: .regular))
@@ -59,7 +59,7 @@ func updateStatusIcon() {
             .withSymbolConfiguration(config)
         img?.isTemplate = false
         button.image = img
-    } else if audioControlEnabled {
+    } else if defaultSettings.mode == .audio {
         let config = NSImage.SymbolConfiguration(paletteColors: [.labelColor, .systemBlue])
         let img = NSImage(systemSymbolName: "circle.inset.filled", accessibilityDescription: "PowerMate Agent — Audio mode")?
             .withSymbolConfiguration(config)

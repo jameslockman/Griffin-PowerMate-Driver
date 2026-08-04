@@ -69,10 +69,17 @@ func useMenuBehavior() -> Bool {
 }
 
 /// True when rotation and clicks should control audio (XOR with Fn to momentarily flip).
-func useAudioBehavior() -> Bool {
+/// `mode` is the effective mode for the frontmost app (global default or its override).
+func useAudioBehavior(mode: RotationMode) -> Bool {
     let fnHeld = NSEvent.modifierFlags.contains(.function)
-    let wantAudio = audioControlEnabled != fnHeld   // XOR: Fn flips whatever the setting is
+    let wantAudio = (mode == .audio) != fnHeld   // XOR: Fn flips whatever the setting is
     return wantAudio && !useMenuBehavior()
+}
+
+/// True when rotation should send configured keypresses instead of scrolling.
+/// Audio mode (including a momentary Fn flip) and menu behavior both take priority.
+func useKeypressBehavior(mode: RotationMode) -> Bool {
+    mode == .keypress && !useAudioBehavior(mode: mode) && !useMenuBehavior()
 }
 
 // MARK: - Menu mode lifecycle
