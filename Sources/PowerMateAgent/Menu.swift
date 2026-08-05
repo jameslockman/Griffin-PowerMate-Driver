@@ -11,8 +11,17 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     var scrollModeItem: NSMenuItem!
     var audioControlItem: NSMenuItem!
     var keypressModeItem: NSMenuItem!
+    var clickLeftClickItem: NSMenuItem!
+    var clickRightClickItem: NSMenuItem!
     var clickMuteItem: NSMenuItem!
     var clickPlayPauseItem: NSMenuItem!
+    var clickCustomItem: NSMenuItem!
+    var doubleClickNoneItem: NSMenuItem!
+    var doubleClickLeftClickItem: NSMenuItem!
+    var doubleClickRightClickItem: NSMenuItem!
+    var doubleClickMuteItem: NSMenuItem!
+    var doubleClickPlayPauseItem: NSMenuItem!
+    var doubleClickCustomItem: NSMenuItem!
     var vuMeterItem: NSMenuItem!
     var longPressRightItem: NSMenuItem!
     var longPressLeftItem: NSMenuItem!
@@ -22,6 +31,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     var longPressToggleScrollKeypressItem: NSMenuItem!
     var longPressFineScrollItem: NSMenuItem!
     var longPressRunScriptItem: NSMenuItem!
+    var longPressCustomItem: NSMenuItem!
 
     func updateMenuState() {
         reverseScrollItem.state       = defaultSettings.scrollReversed ? .on : .off
@@ -31,8 +41,19 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         scrollModeItem.state          = defaultSettings.mode == .scroll ? .on : .off
         audioControlItem.state        = defaultSettings.mode == .audio ? .on : .off
         keypressModeItem.state        = defaultSettings.mode == .keypress ? .on : .off
+        clickLeftClickItem.state      = (defaultSettings.clickAction == .leftClick) ? .on : .off
+        clickRightClickItem.state     = (defaultSettings.clickAction == .rightClick) ? .on : .off
         clickMuteItem.state           = (defaultSettings.clickAction == .mute) ? .on : .off
         clickPlayPauseItem.state      = (defaultSettings.clickAction == .playPause) ? .on : .off
+        clickCustomItem.state         = (defaultSettings.clickAction.customBinding != nil) ? .on : .off
+        clickCustomItem.title         = customKeypressTitle(defaultSettings.clickAction.customBinding)
+        doubleClickNoneItem.state      = (defaultSettings.doubleClickAction == .none) ? .on : .off
+        doubleClickLeftClickItem.state = (defaultSettings.doubleClickAction == .leftClick) ? .on : .off
+        doubleClickRightClickItem.state = (defaultSettings.doubleClickAction == .rightClick) ? .on : .off
+        doubleClickMuteItem.state      = (defaultSettings.doubleClickAction == .mute) ? .on : .off
+        doubleClickPlayPauseItem.state = (defaultSettings.doubleClickAction == .playPause) ? .on : .off
+        doubleClickCustomItem.state    = (defaultSettings.doubleClickAction.customBinding != nil) ? .on : .off
+        doubleClickCustomItem.title    = customKeypressTitle(defaultSettings.doubleClickAction.customBinding)
         vuMeterItem.state             = vuMeterEnabled ? .on : .off
         longPressRightItem.state               = (defaultSettings.longPressAction == .rightClick) ? .on : .off
         longPressLeftItem.state                = (defaultSettings.longPressAction == .leftClick) ? .on : .off
@@ -42,6 +63,8 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         longPressToggleScrollKeypressItem.state = (defaultSettings.longPressAction == .toggleMode(.scrollKeypress)) ? .on : .off
         longPressFineScrollItem.state           = (defaultSettings.longPressAction == .toggleFineScroll) ? .on : .off
         longPressRunScriptItem.state            = (defaultSettings.longPressAction == .runScript) ? .on : .off
+        longPressCustomItem.state               = (defaultSettings.longPressAction.customBinding != nil) ? .on : .off
+        longPressCustomItem.title               = customKeypressTitle(defaultSettings.longPressAction.customBinding)
         updateStatusIcon()
         updateDockIcon()
     }
@@ -114,16 +137,39 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         showAppOverridesWindow()
     }
 
-    @objc func setClickMute() {
-        defaultSettings.clickAction = .mute
+    private func setClickAction(_ action: ClickAction) {
+        defaultSettings.clickAction = action
         saveDefaultSettings()
         updateMenuState()
     }
 
-    @objc func setClickPlayPause() {
-        defaultSettings.clickAction = .playPause
+    @objc func setClickLeftClick()  { setClickAction(.leftClick) }
+    @objc func setClickRightClick() { setClickAction(.rightClick) }
+    @objc func setClickMute()       { setClickAction(.mute) }
+    @objc func setClickPlayPause()  { setClickAction(.playPause) }
+
+    @objc func setClickCustom() {
+        if let binding = showCaptureCustomKeypress(current: defaultSettings.clickAction.customBinding) {
+            setClickAction(.custom(binding))
+        }
+    }
+
+    private func setDoubleClickAction(_ action: ClickAction) {
+        defaultSettings.doubleClickAction = action
         saveDefaultSettings()
         updateMenuState()
+    }
+
+    @objc func setDoubleClickNone()       { setDoubleClickAction(.none) }
+    @objc func setDoubleClickLeftClick()  { setDoubleClickAction(.leftClick) }
+    @objc func setDoubleClickRightClick() { setDoubleClickAction(.rightClick) }
+    @objc func setDoubleClickMute()       { setDoubleClickAction(.mute) }
+    @objc func setDoubleClickPlayPause()  { setDoubleClickAction(.playPause) }
+
+    @objc func setDoubleClickCustom() {
+        if let binding = showCaptureCustomKeypress(current: defaultSettings.doubleClickAction.customBinding) {
+            setDoubleClickAction(.custom(binding))
+        }
     }
 
     @objc func toggleVUMeter() {
@@ -155,6 +201,12 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     @objc func setLongPressFineScroll()          { setLongPressAction(.toggleFineScroll) }
     @objc func setLongPressRunScript()           { setLongPressAction(.runScript) }
 
+    @objc func setLongPressCustom() {
+        if let binding = showCaptureCustomKeypress(current: defaultSettings.longPressAction.customBinding) {
+            setLongPressAction(.custom(binding))
+        }
+    }
+
     @objc func configureScripts() {
         showConfigureScripts()
     }
@@ -172,12 +224,12 @@ final class MenuHandler: NSObject, NSMenuDelegate {
             ("", "PowerMate Agent runs in the background and turns the PowerMate into a scroll wheel or volume control.\n"),
             ("Scroll mode, Audio mode, Keypress mode", " – Mutually exclusive: pick one to set what turning the PowerMate does by default."),
             ("VU Meter", " – Pulse the blue LED in time with your audio stream."),
-            ("Click in audio mode", " – Set the default action to Play/Pause or Mute/Unmute. Hold Shift to use the other action."),
             ("Prefer Fine volume in audio mode", " – Swap normal and fine volume steps in audio mode."),
             ("Reverse scroll direction", " – Reverses the scroll direction in scroll mode."),
             ("Prefer Fine scrolling", " – Scroll by single-pixel increments instead of the default coarse step for precise control."),
             ("Keypress mode", " – Turning sends a configured keystroke instead of scrolling (disables Audio mode). Configure the keys, including Shift/Option/Command/Press variants, via \"Configure Keypress Mode...\".\n"),
-            ("Long press", " – Right-click, left-click, double-click, toggle between two modes (Audio/Scroll, Audio/Keypress, or Scroll/Keypress), toggle fine/coarse scrolling, or run a script. Configurable per app in \"Configure Applications...\".\n"),
+            ("Click / Double-click", " – Set what the button does on a click or double-click: Left-click, Right-click, Mute/Unmute, Play/Pause, or a Custom Keypress you record. Applies the same in every mode. Double-click defaults to None (no detection delay added to clicks) until you configure one. For Mute/Unmute or Play/Pause, hold Shift to use the other action."),
+            ("Long press", " – Right-click, left-click, double-click, toggle between two modes (Audio/Scroll, Audio/Keypress, or Scroll/Keypress), toggle fine/coarse scrolling, run a script, or a Custom Keypress. Configurable per app in \"Configure Applications...\".\n"),
             ("Modifiers:", ""),
             ("Fn + turn", " – Momentarily toggle between scroll and audio mode."),
             ("Shift + turn (audio mode)", " – Fine volume step (like Shift+Option+Volume keys)."),
@@ -185,7 +237,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
             ("Option + turn (scroll mode)", " – Toggle between fine and coarse scrolling."),
             ("Shift + Option + turn (scroll mode)", " – Scroll on the alternate axis in fine mode."),
             ("Press + turn (audio or scroll mode)", " – Skip to next or previous track in the current media player."),
-            ("Shift + click (audio mode)", " – Alternate between mute and play/pause.\n"),
+            ("Shift + click/double-click", " – When set to Mute/Unmute or Play/Pause, alternates to the other action instead.\n"),
             ("Configure Scripts", " – Sets shell commands for long press (and Shift+long press).\n"),
             ("Configure Applications", " – Override the mode and its settings for specific apps, independent of the defaults above. Add an app, then set its mode (Scroll/Audio/Keypress) and behavior.\n"),
             ("Feedback/bug report", " - Let us know if you have any issues or suggestions."),
@@ -296,19 +348,6 @@ func buildMenu() {
     menuHandler.vuMeterItem = vuMeterItem
     menu.addItem(vuMeterItem)
 
-    let clickMenu = NSMenu()
-    let clickMuteItem = NSMenuItem(title: "Mute/unmute", action: #selector(MenuHandler.setClickMute), keyEquivalent: "")
-    clickMuteItem.target = menuHandler
-    menuHandler.clickMuteItem = clickMuteItem
-    clickMenu.addItem(clickMuteItem)
-    let clickPlayPauseItem = NSMenuItem(title: "Play/Pause", action: #selector(MenuHandler.setClickPlayPause), keyEquivalent: "")
-    clickPlayPauseItem.target = menuHandler
-    menuHandler.clickPlayPauseItem = clickPlayPauseItem
-    clickMenu.addItem(clickPlayPauseItem)
-    let clickSub = NSMenuItem(title: "Click in audio mode", action: nil, keyEquivalent: "")
-    clickSub.submenu = clickMenu
-    menu.addItem(clickSub)
-
     let audioStepSwappedItem = NSMenuItem(title: "Prefer Fine volume in audio mode", action: #selector(MenuHandler.toggleAudioStepSwapped), keyEquivalent: "")
     audioStepSwappedItem.target = menuHandler
     menuHandler.audioStepSwappedItem = audioStepSwappedItem
@@ -349,6 +388,62 @@ func buildMenu() {
 
     menu.addItem(NSMenuItem.separator())
 
+    // Click, Double-click, and Long press are grouped together: all three are independent of
+    // rotation mode and configure what the button itself does.
+    let clickMenu = NSMenu()
+    let clickLeftClickItem = NSMenuItem(title: "Left-click", action: #selector(MenuHandler.setClickLeftClick), keyEquivalent: "")
+    clickLeftClickItem.target = menuHandler
+    menuHandler.clickLeftClickItem = clickLeftClickItem
+    clickMenu.addItem(clickLeftClickItem)
+    let clickRightClickItem = NSMenuItem(title: "Right-click", action: #selector(MenuHandler.setClickRightClick), keyEquivalent: "")
+    clickRightClickItem.target = menuHandler
+    menuHandler.clickRightClickItem = clickRightClickItem
+    clickMenu.addItem(clickRightClickItem)
+    let clickMuteItem = NSMenuItem(title: "Mute/unmute", action: #selector(MenuHandler.setClickMute), keyEquivalent: "")
+    clickMuteItem.target = menuHandler
+    menuHandler.clickMuteItem = clickMuteItem
+    clickMenu.addItem(clickMuteItem)
+    let clickPlayPauseItem = NSMenuItem(title: "Play/Pause", action: #selector(MenuHandler.setClickPlayPause), keyEquivalent: "")
+    clickPlayPauseItem.target = menuHandler
+    menuHandler.clickPlayPauseItem = clickPlayPauseItem
+    clickMenu.addItem(clickPlayPauseItem)
+    let clickCustomItem = NSMenuItem(title: "Custom Keypress...", action: #selector(MenuHandler.setClickCustom), keyEquivalent: "")
+    clickCustomItem.target = menuHandler
+    menuHandler.clickCustomItem = clickCustomItem
+    clickMenu.addItem(clickCustomItem)
+    let clickSub = NSMenuItem(title: "Click", action: nil, keyEquivalent: "")
+    clickSub.submenu = clickMenu
+    menu.addItem(clickSub)
+
+    let doubleClickMenu = NSMenu()
+    let doubleClickNoneItem = NSMenuItem(title: "None", action: #selector(MenuHandler.setDoubleClickNone), keyEquivalent: "")
+    doubleClickNoneItem.target = menuHandler
+    menuHandler.doubleClickNoneItem = doubleClickNoneItem
+    doubleClickMenu.addItem(doubleClickNoneItem)
+    let doubleClickLeftClickItem = NSMenuItem(title: "Left-click", action: #selector(MenuHandler.setDoubleClickLeftClick), keyEquivalent: "")
+    doubleClickLeftClickItem.target = menuHandler
+    menuHandler.doubleClickLeftClickItem = doubleClickLeftClickItem
+    doubleClickMenu.addItem(doubleClickLeftClickItem)
+    let doubleClickRightClickItem = NSMenuItem(title: "Right-click", action: #selector(MenuHandler.setDoubleClickRightClick), keyEquivalent: "")
+    doubleClickRightClickItem.target = menuHandler
+    menuHandler.doubleClickRightClickItem = doubleClickRightClickItem
+    doubleClickMenu.addItem(doubleClickRightClickItem)
+    let doubleClickMuteItem = NSMenuItem(title: "Mute/unmute", action: #selector(MenuHandler.setDoubleClickMute), keyEquivalent: "")
+    doubleClickMuteItem.target = menuHandler
+    menuHandler.doubleClickMuteItem = doubleClickMuteItem
+    doubleClickMenu.addItem(doubleClickMuteItem)
+    let doubleClickPlayPauseItem = NSMenuItem(title: "Play/Pause", action: #selector(MenuHandler.setDoubleClickPlayPause), keyEquivalent: "")
+    doubleClickPlayPauseItem.target = menuHandler
+    menuHandler.doubleClickPlayPauseItem = doubleClickPlayPauseItem
+    doubleClickMenu.addItem(doubleClickPlayPauseItem)
+    let doubleClickCustomItem = NSMenuItem(title: "Custom Keypress...", action: #selector(MenuHandler.setDoubleClickCustom), keyEquivalent: "")
+    doubleClickCustomItem.target = menuHandler
+    menuHandler.doubleClickCustomItem = doubleClickCustomItem
+    doubleClickMenu.addItem(doubleClickCustomItem)
+    let doubleClickSub = NSMenuItem(title: "Double-click", action: nil, keyEquivalent: "")
+    doubleClickSub.submenu = doubleClickMenu
+    menu.addItem(doubleClickSub)
+
     let longPressMenu = NSMenu()
     let longPressRightItem = NSMenuItem(title: "Right-click", action: #selector(MenuHandler.setLongPressRightClick), keyEquivalent: "")
     longPressRightItem.target = menuHandler
@@ -388,6 +483,10 @@ func buildMenu() {
     longPressRunScriptItem.target = menuHandler
     menuHandler.longPressRunScriptItem = longPressRunScriptItem
     longPressMenu.addItem(longPressRunScriptItem)
+    let longPressCustomItem = NSMenuItem(title: "Custom Keypress...", action: #selector(MenuHandler.setLongPressCustom), keyEquivalent: "")
+    longPressCustomItem.target = menuHandler
+    menuHandler.longPressCustomItem = longPressCustomItem
+    longPressMenu.addItem(longPressCustomItem)
     let longPressSub = NSMenuItem(title: "Long press", action: nil, keyEquivalent: "")
     longPressSub.submenu = longPressMenu
     menu.addItem(longPressSub)

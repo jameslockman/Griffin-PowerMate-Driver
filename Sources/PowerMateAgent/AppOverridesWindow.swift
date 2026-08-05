@@ -25,17 +25,30 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
     private let scrollAxesSwappedCheck = NSButton(checkboxWithTitle: "Default to horizontal scroll", target: nil, action: nil)
 
     private let audioStepSwappedCheck = NSButton(checkboxWithTitle: "Prefer fine volume", target: nil, action: nil)
-    private let clickActionLabel      = NSTextField(labelWithString: "Click:")
-    private let clickActionPopup      = NSPopUpButton()
 
     private let configureKeysButton = NSButton(title: "Configure Keys...", target: nil, action: nil)
 
-    // Long press is orthogonal to mode, so it's always visible (not hidden per-mode like the
-    // controls above). Presented as a hierarchical pop-up (Toggle Mode is a submenu), matching
-    // the "Long press" submenu structure in the main status-bar menu.
+    // Click, Double-click, and Long press are all orthogonal to mode, so they're always visible
+    // (not hidden per-mode like the controls above). Presented as hierarchical pop-ups (Toggle
+    // Mode and Custom Keypress are effectively "sub-actions"), matching the status-bar menu.
+    private let clickActionLabel = NSTextField(labelWithString: "Click:")
+    private let clickActionPopup = NSPopUpButton()
+    private var clickActionMenuItems: [NSMenuItem] = []
+    private var clickCustomMenuItem: NSMenuItem!
+
+    private let doubleClickActionLabel = NSTextField(labelWithString: "Double-click:")
+    private let doubleClickActionPopup = NSPopUpButton()
+    private var doubleClickActionMenuItems: [NSMenuItem] = []
+    private var doubleClickCustomMenuItem: NSMenuItem!
+
     private let longPressLabel = NSTextField(labelWithString: "Long press:")
     private let longPressPopup = NSPopUpButton()
     private var longPressMenuItems: [NSMenuItem] = []
+    private var longPressCustomMenuItem: NSMenuItem!
+
+    // Only shown when this app's long press is set to "Run Script" — lets this app run a
+    // different script than the global default (set via the main "Configure Scripts...").
+    private let configureScriptButton = NSButton(title: "Configure Script...", target: nil, action: nil)
 
     private let instructionsLabel = NSTextField(wrappingLabelWithString: "")
     private let noSelectionInstructions =
@@ -44,18 +57,19 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
     private let selectedAppInstructions =
         "Pick a mode above, then use the controls that appear for it (scroll options, " +
         "audio options, or key bindings) to configure that mode's behavior for this app. " +
-        "Long press can optionally be set to \"Toggle Mode\" so you can swap between two " +
-        "modes on the fly, without reopening this window."
+        "Click, Double-click, and Long press apply the same regardless of mode. Long press " +
+        "can optionally be set to \"Toggle Mode\" so you can swap between two modes on the " +
+        "fly, without reopening this window."
 
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 480),
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 560),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Configure Applications for PowerMate"
-        window.minSize = NSSize(width: 480, height: 400)
+        window.minSize = NSSize(width: 540, height: 480)
         window.center()
         self.init(window: window)
         window.delegate = self
@@ -69,7 +83,7 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         guard let contentView = window?.contentView else { return }
 
         // Left column: app list + add/remove.
-        let scrollView = NSScrollView(frame: NSRect(x: 16, y: 48, width: 200, height: 416))
+        let scrollView = NSScrollView(frame: NSRect(x: 16, y: 48, width: 200, height: 496))
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers  = true
         scrollView.borderType          = .bezelBorder
@@ -99,17 +113,17 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
 
         // Right column: selected app's settings.
         let rightX: CGFloat = 232
-        let rightW: CGFloat = 312
+        let rightW: CGFloat = 392
 
         appNameLabel.font  = NSFont.boldSystemFont(ofSize: NSFont.systemFontSize)
-        appNameLabel.frame = NSRect(x: rightX, y: 440, width: rightW, height: 20)
+        appNameLabel.frame = NSRect(x: rightX, y: 525, width: rightW, height: 20)
         appNameLabel.autoresizingMask = [.width]
         contentView.addSubview(appNameLabel)
 
-        modeLabel.frame = NSRect(x: rightX, y: 406, width: 44, height: 24)
+        modeLabel.frame = NSRect(x: rightX, y: 487, width: 44, height: 24)
         contentView.addSubview(modeLabel)
 
-        modePopup.frame = NSRect(x: rightX + 48, y: 404, width: 150, height: 26)
+        modePopup.frame = NSRect(x: rightX + 48, y: 485, width: 150, height: 26)
         for mode in RotationMode.allCases {
             modePopup.addItem(withTitle: title(for: mode))
         }
@@ -117,42 +131,60 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         modePopup.action = #selector(modeChanged)
         contentView.addSubview(modePopup)
 
-        let separator = NSBox(frame: NSRect(x: rightX, y: 392, width: rightW, height: 1))
+        let separator = NSBox(frame: NSRect(x: rightX, y: 472, width: rightW, height: 1))
         separator.boxType = .separator
         separator.autoresizingMask = [.width]
         contentView.addSubview(separator)
 
         // Scroll-mode controls.
-        scrollReversedCheck.frame    = NSRect(x: rightX, y: 352, width: rightW, height: 20)
-        fineScrollCheck.frame        = NSRect(x: rightX, y: 324, width: rightW, height: 20)
-        scrollAxesSwappedCheck.frame = NSRect(x: rightX, y: 296, width: rightW, height: 20)
+        scrollReversedCheck.frame    = NSRect(x: rightX, y: 434, width: rightW, height: 20)
+        fineScrollCheck.frame        = NSRect(x: rightX, y: 406, width: rightW, height: 20)
+        scrollAxesSwappedCheck.frame = NSRect(x: rightX, y: 378, width: rightW, height: 20)
         for c in [scrollReversedCheck, fineScrollCheck, scrollAxesSwappedCheck] {
             c.target = self
             c.action = #selector(settingChanged)
             contentView.addSubview(c)
         }
 
-        // Audio-mode controls.
-        audioStepSwappedCheck.frame = NSRect(x: rightX, y: 352, width: rightW, height: 20)
+        // Audio-mode controls. (Click is no longer audio-specific — see the always-visible
+        // Click/Double-click section below.)
+        audioStepSwappedCheck.frame = NSRect(x: rightX, y: 434, width: rightW, height: 20)
         audioStepSwappedCheck.target = self
         audioStepSwappedCheck.action = #selector(settingChanged)
         contentView.addSubview(audioStepSwappedCheck)
 
-        clickActionLabel.frame = NSRect(x: rightX, y: 320, width: 44, height: 24)
-        contentView.addSubview(clickActionLabel)
-
-        clickActionPopup.frame = NSRect(x: rightX + 48, y: 318, width: 150, height: 26)
-        clickActionPopup.addItem(withTitle: "Mute/Unmute")
-        clickActionPopup.addItem(withTitle: "Play/Pause")
-        clickActionPopup.target = self
-        clickActionPopup.action = #selector(settingChanged)
-        contentView.addSubview(clickActionPopup)
-
         // Keypress-mode controls.
-        configureKeysButton.frame  = NSRect(x: rightX, y: 352, width: 150, height: 24)
+        configureKeysButton.frame  = NSRect(x: rightX, y: 434, width: 150, height: 24)
         configureKeysButton.target = self
         configureKeysButton.action = #selector(configureKeys)
         contentView.addSubview(configureKeysButton)
+
+        // Click/Double-click (always visible, independent of mode).
+        let clickActionsSeparator = NSBox(frame: NSRect(x: rightX, y: 357, width: rightW, height: 1))
+        clickActionsSeparator.boxType = .separator
+        clickActionsSeparator.autoresizingMask = [.width]
+        contentView.addSubview(clickActionsSeparator)
+
+        let clickLabelWidth: CGFloat = 100
+        let clickPopupX = rightX + clickLabelWidth + 8
+
+        clickActionLabel.frame = NSRect(x: rightX, y: 319, width: clickLabelWidth, height: 24)
+        contentView.addSubview(clickActionLabel)
+
+        clickActionPopup.frame = NSRect(x: clickPopupX, y: 317, width: rightX + rightW - clickPopupX, height: 26)
+        clickActionPopup.menu = buildClickActionMenu()
+        clickActionPopup.target = self
+        clickActionPopup.action = #selector(clickActionChanged)
+        contentView.addSubview(clickActionPopup)
+
+        doubleClickActionLabel.frame = NSRect(x: rightX, y: 283, width: clickLabelWidth, height: 24)
+        contentView.addSubview(doubleClickActionLabel)
+
+        doubleClickActionPopup.frame = NSRect(x: clickPopupX, y: 281, width: rightX + rightW - clickPopupX, height: 26)
+        doubleClickActionPopup.menu = buildDoubleClickActionMenu()
+        doubleClickActionPopup.target = self
+        doubleClickActionPopup.action = #selector(doubleClickActionChanged)
+        contentView.addSubview(doubleClickActionPopup)
 
         // Long press (always visible, independent of mode).
         let longPressSeparator = NSBox(frame: NSRect(x: rightX, y: 266, width: rightW, height: 1))
@@ -163,13 +195,19 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         longPressLabel.frame = NSRect(x: rightX, y: 232, width: 80, height: 24)
         contentView.addSubview(longPressLabel)
 
-        longPressPopup.frame = NSRect(x: rightX, y: 202, width: 220, height: 26)
+        longPressPopup.frame = NSRect(x: rightX, y: 202, width: rightW, height: 26)
         longPressPopup.menu = buildLongPressMenu()
         // Target/action on the button itself (not on individual items) so NSPopUpButton's
         // own selection tracking updates the displayed title — same pattern as modePopup.
         longPressPopup.target = self
         longPressPopup.action = #selector(longPressChanged)
         contentView.addSubview(longPressPopup)
+
+        // Only visible when this app's long press is "Run Script" — see updateDetailPane.
+        configureScriptButton.frame = NSRect(x: rightX, y: 174, width: 220, height: 24)
+        configureScriptButton.target = self
+        configureScriptButton.action = #selector(configureAppScript)
+        contentView.addSubview(configureScriptButton)
 
         // Instructions (always visible — a quick reminder of how mode + long press interact).
         let instructionsSeparator = NSBox(frame: NSRect(x: rightX, y: 170, width: rightW, height: 1))
@@ -203,6 +241,13 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         menu.addItem(.separator())
         addLongPressItem("Toggle fine/coarse scrolling", .toggleFineScroll, to: menu)
         addLongPressItem("Run Script", .runScript, to: menu)
+        let custom = NSMenuItem(title: "Custom Keypress...", action: nil, keyEquivalent: "")
+        // Placeholder binding: selecting this item always opens the capture dialog (see
+        // longPressChanged), which replaces it with the actually-recorded key before saving.
+        custom.representedObject = LongPressAction.custom(KeyBinding(keyCode: kReturnKey, label: ""))
+        menu.addItem(custom)
+        longPressMenuItems.append(custom)
+        longPressCustomMenuItem = custom
         return menu
     }
 
@@ -212,6 +257,52 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         item.representedObject = action
         menu.addItem(item)
         longPressMenuItems.append(item)
+    }
+
+    /// Same hierarchical pop-up pattern as buildLongPressMenu. "Custom Keypress..." uses a
+    /// placeholder binding purely as a marker — clickActionChanged replaces it with the actually
+    /// recorded key before saving.
+    private func buildClickActionMenu() -> NSMenu {
+        let menu = NSMenu()
+        func add(_ title: String, _ action: ClickAction) {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            item.representedObject = action
+            menu.addItem(item)
+            clickActionMenuItems.append(item)
+        }
+        add("Left-click", .leftClick)
+        add("Right-click", .rightClick)
+        add("Mute/Unmute", .mute)
+        add("Play/Pause", .playPause)
+        let custom = NSMenuItem(title: "Custom Keypress...", action: nil, keyEquivalent: "")
+        custom.representedObject = ClickAction.custom(KeyBinding(keyCode: kReturnKey, label: ""))
+        menu.addItem(custom)
+        clickActionMenuItems.append(custom)
+        clickCustomMenuItem = custom
+        return menu
+    }
+
+    /// Same as buildClickActionMenu, with an added "None" (disabled) option — double-click
+    /// defaults to None so it adds no click-detection latency until configured.
+    private func buildDoubleClickActionMenu() -> NSMenu {
+        let menu = NSMenu()
+        func add(_ title: String, _ action: ClickAction) {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            item.representedObject = action
+            menu.addItem(item)
+            doubleClickActionMenuItems.append(item)
+        }
+        add("None", .none)
+        add("Left-click", .leftClick)
+        add("Right-click", .rightClick)
+        add("Mute/Unmute", .mute)
+        add("Play/Pause", .playPause)
+        let custom = NSMenuItem(title: "Custom Keypress...", action: nil, keyEquivalent: "")
+        custom.representedObject = ClickAction.custom(KeyBinding(keyCode: kReturnKey, label: ""))
+        menu.addItem(custom)
+        doubleClickActionMenuItems.append(custom)
+        doubleClickCustomMenuItem = custom
+        return menu
     }
 
     private func title(for mode: RotationMode) -> String {
@@ -274,7 +365,7 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
     }
 
     private func setAudioControlsHidden(_ hidden: Bool) {
-        for v in [audioStepSwappedCheck, clickActionLabel, clickActionPopup] { v.isHidden = hidden }
+        audioStepSwappedCheck.isHidden = hidden
     }
 
     private func setKeypressControlsHidden(_ hidden: Bool) {
@@ -295,8 +386,13 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
             setScrollControlsHidden(true)
             setAudioControlsHidden(true)
             setKeypressControlsHidden(true)
+            clickActionLabel.isHidden = true
+            clickActionPopup.isHidden = true
+            doubleClickActionLabel.isHidden = true
+            doubleClickActionPopup.isHidden = true
             longPressLabel.isHidden = true
             longPressPopup.isHidden = true
+            configureScriptButton.isHidden = true
             instructionsLabel.stringValue = noSelectionInstructions
             return
         }
@@ -308,14 +404,38 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         fineScrollCheck.state        = settings.fineScrollEnabled ? .on : .off
         scrollAxesSwappedCheck.state = settings.scrollAxesSwapped ? .on : .off
         audioStepSwappedCheck.state  = settings.audioStepSwapped ? .on : .off
-        clickActionPopup.selectItem(at: settings.clickAction == .mute ? 0 : 1)
         updateModeSpecificVisibility(settings.mode)
+
+        clickActionLabel.isHidden = false
+        clickActionPopup.isHidden = false
+        if case .custom = settings.clickAction {
+            clickCustomMenuItem.title = customKeypressTitle(settings.clickAction.customBinding)
+            clickActionPopup.select(clickCustomMenuItem)
+        } else if let match = clickActionMenuItems.first(where: { ($0.representedObject as? ClickAction) == settings.clickAction }) {
+            clickActionPopup.select(match)
+        }
+
+        doubleClickActionLabel.isHidden = false
+        doubleClickActionPopup.isHidden = false
+        if case .custom = settings.doubleClickAction {
+            doubleClickCustomMenuItem.title = customKeypressTitle(settings.doubleClickAction.customBinding)
+            doubleClickActionPopup.select(doubleClickCustomMenuItem)
+        } else if let match = doubleClickActionMenuItems.first(where: { ($0.representedObject as? ClickAction) == settings.doubleClickAction }) {
+            doubleClickActionPopup.select(match)
+        }
 
         longPressLabel.isHidden = false
         longPressPopup.isHidden = false
-        if let match = longPressMenuItems.first(where: { ($0.representedObject as? LongPressAction) == settings.longPressAction }) {
+        if case .custom = settings.longPressAction {
+            longPressCustomMenuItem.title = customKeypressTitle(settings.longPressAction.customBinding)
+            longPressPopup.select(longPressCustomMenuItem)
+        } else if let match = longPressMenuItems.first(where: { ($0.representedObject as? LongPressAction) == settings.longPressAction }) {
             longPressPopup.select(match)
         }
+        configureScriptButton.isHidden = settings.longPressAction != .runScript
+        configureScriptButton.title = (settings.script1 != nil || settings.script2 != nil)
+            ? "Configure Script... (Custom)"
+            : "Configure Script... (Default)"
 
         instructionsLabel.stringValue = selectedAppInstructions
     }
@@ -336,15 +456,57 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         perAppSettings[bundleID]?.fineScrollEnabled = fineScrollCheck.state == .on
         perAppSettings[bundleID]?.scrollAxesSwapped = scrollAxesSwappedCheck.state == .on
         perAppSettings[bundleID]?.audioStepSwapped  = audioStepSwappedCheck.state == .on
-        perAppSettings[bundleID]?.clickAction       = clickActionPopup.indexOfSelectedItem == 0 ? .mute : .playPause
         savePerAppSettings()
+    }
+
+    @objc private func clickActionChanged() {
+        guard let bundleID = selectedBundleID(),
+              let action = clickActionPopup.selectedItem?.representedObject as? ClickAction else { return }
+        if case .custom = action {
+            // Selecting "Custom Keypress..." always opens the capture dialog; cancelling it
+            // reverts the pop-up to whatever was actually selected before.
+            guard let binding = showCaptureCustomKeypress(current: perAppSettings[bundleID]?.clickAction.customBinding) else {
+                updateDetailPane()
+                return
+            }
+            perAppSettings[bundleID]?.clickAction = .custom(binding)
+        } else {
+            perAppSettings[bundleID]?.clickAction = action
+        }
+        savePerAppSettings()
+        updateDetailPane()
+    }
+
+    @objc private func doubleClickActionChanged() {
+        guard let bundleID = selectedBundleID(),
+              let action = doubleClickActionPopup.selectedItem?.representedObject as? ClickAction else { return }
+        if case .custom = action {
+            guard let binding = showCaptureCustomKeypress(current: perAppSettings[bundleID]?.doubleClickAction.customBinding) else {
+                updateDetailPane()
+                return
+            }
+            perAppSettings[bundleID]?.doubleClickAction = .custom(binding)
+        } else {
+            perAppSettings[bundleID]?.doubleClickAction = action
+        }
+        savePerAppSettings()
+        updateDetailPane()
     }
 
     @objc private func longPressChanged() {
         guard let bundleID = selectedBundleID(),
               let action = longPressPopup.selectedItem?.representedObject as? LongPressAction else { return }
-        perAppSettings[bundleID]?.longPressAction = action
+        if case .custom = action {
+            guard let binding = showCaptureCustomKeypress(current: perAppSettings[bundleID]?.longPressAction.customBinding) else {
+                updateDetailPane()
+                return
+            }
+            perAppSettings[bundleID]?.longPressAction = .custom(binding)
+        } else {
+            perAppSettings[bundleID]?.longPressAction = action
+        }
         savePerAppSettings()
+        updateDetailPane()
     }
 
     @objc private func configureKeys() {
@@ -353,6 +515,15 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
             perAppSettings[bundleID] = updated
             savePerAppSettings()
         }
+    }
+
+    @objc private func configureAppScript() {
+        guard let bundleID = selectedBundleID(), let settings = perAppSettings[bundleID] else { return }
+        guard let (script1, script2) = showConfigureAppScripts(current1: settings.script1, current2: settings.script2) else { return }
+        perAppSettings[bundleID]?.script1 = script1
+        perAppSettings[bundleID]?.script2 = script2
+        savePerAppSettings()
+        updateDetailPane()
     }
 
     // MARK: - NSTableViewDataSource / Delegate

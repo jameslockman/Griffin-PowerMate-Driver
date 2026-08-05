@@ -23,8 +23,10 @@ private let kPowerMateReportLength: Int = 6    // 6-byte input report
 public enum PowerMateEvent {
     case buttonDown
     case buttonUp
-    /// Short press and release (under longPressThreshold).
+    /// Short press and release (under longPressThreshold), not followed by a second click.
     case buttonClick
+    /// Two short press-and-releases within doubleClickInterval of each other.
+    case buttonDoubleClick
     /// Press held for at least longPressThreshold, then release.
     case buttonLongPress
     case rotate(delta: Int, rate: Double?)  // delta: + = clockwise, - = counter-clockwise; rate: deltas per second (nil on first report)
@@ -45,12 +47,23 @@ public final class PowerMateDriver {
     /// Optional closures for mapping events (set these or use delegate).
     public var onButtonDown: (() -> Void)?
     public var onButtonUp: (() -> Void)?
-    /// Fired on release after a short press (duration < longPressThreshold).
+    /// Fired on release after a short press (duration < longPressThreshold), unless a second
+    /// click follows within doubleClickInterval (in which case onDoubleClick fires instead).
     public var onClick: (() -> Void)?
+    /// Fired when a second short press-and-release follows the first within doubleClickInterval.
+    /// Only ever fires while shouldWaitForDoubleClick returns true (see below).
+    public var onDoubleClick: (() -> Void)?
     /// Fired on release after a long press (duration >= longPressThreshold).
     public var onLongPress: (() -> Void)?
     /// Hold duration in seconds that separates click from long press. Default 0.4.
     public var longPressThreshold: TimeInterval = 0.4
+    /// Max gap between the end of one click and the start of the next to count as a double-click.
+    public var doubleClickInterval: TimeInterval = 0.3
+    /// Queried at the end of every short click to decide whether to hold it briefly and wait
+    /// for a possible second click. Returning false (the default when unset) fires onClick
+    /// immediately with no added latency — set this only once a double-click action is actually
+    /// configured, since waiting delays every single click by up to doubleClickInterval.
+    public var shouldWaitForDoubleClick: (() -> Bool)?
     /// delta: + = clockwise, - = counter-clockwise; rate: approximate deltas per second (nil on first report).
     public var onRotate: ((Int, Double?) -> Void)?
 
@@ -68,6 +81,9 @@ public final class PowerMateDriver {
     private var lastButtonState: Int = 0
     private var lastButtonDownTime: CFAbsoluteTime?
     private var lastReportTime: CFAbsoluteTime = 0
+    /// A click that's being held (on the main queue) to see if a second one follows within
+    /// doubleClickInterval. Non-nil only between the first click's release and its resolution.
+    private var pendingClickWorkItem: DispatchWorkItem?
     private var deviceLocationID: UInt64?
     private let queue = DispatchQueue(label: "com.powermate.driver", qos: .userInteractive)
 
@@ -241,6 +257,8 @@ public final class PowerMateDriver {
         lastButtonState = 0
         lastButtonDownTime = nil
         lastReportTime = 0
+        pendingClickWorkItem?.cancel()
+        pendingClickWorkItem = nil
         deviceLocationID = nil
         DispatchQueue.main.async { [weak self] in
             self?.isConnected = false
@@ -275,8 +293,25 @@ public final class PowerMateDriver {
                     }
                     self.lastButtonDownTime = nil
                     if duration >= self.longPressThreshold {
+                        self.pendingClickWorkItem?.cancel()
+                        self.pendingClickWorkItem = nil
                         self.emit(.buttonLongPress)
                         self.onLongPress?()
+                    } else if let pending = self.pendingClickWorkItem {
+                        // Second click within doubleClickInterval of the first's release.
+                        pending.cancel()
+                        self.pendingClickWorkItem = nil
+                        self.emit(.buttonDoubleClick)
+                        self.onDoubleClick?()
+                    } else if self.shouldWaitForDoubleClick?() ?? false {
+                        let work = DispatchWorkItem { [weak self] in
+                            guard let self = self else { return }
+                            self.pendingClickWorkItem = nil
+                            self.emit(.buttonClick)
+                            self.onClick?()
+                        }
+                        self.pendingClickWorkItem = work
+                        DispatchQueue.main.asyncAfter(deadline: .now() + self.doubleClickInterval, execute: work)
                     } else {
                         self.emit(.buttonClick)
                         self.onClick?()
