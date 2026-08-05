@@ -3,11 +3,13 @@
 //  PowerMateAgent — runs in the background and turns PowerMate input into
 //  keyboard/scroll events that any application can receive.
 //
-//  Rotation   → scroll, or arrow keys when a menu/submenu is focused,
-//               or system volume when audio controls are enabled
-//  Click      → left mouse (at cursor), or Return when a menu is focused,
-//               or mute/unmute when audio controls are enabled
-//  Long press → right mouse button (then arrow keys until timeout or click)
+//  Rotation     → scroll, or arrow keys when a menu/submenu is focused,
+//                 or system volume when audio controls are enabled
+//  Click        → configurable (left mouse, mute/unmute, play/pause, or a custom keypress),
+//                 or Return when a menu is focused. Same behavior in every rotation mode.
+//  Double-click → configurable the same way as click (off by default).
+//  Long press   → right mouse button by default, but also configurable (left-click,
+//                 double-click, toggle mode, toggle fine scroll, run script, custom keypress)
 //
 //  Menu and submenu detection uses the Accessibility API so rotation and click
 //  work in submenus without leaving "menu mode". Enable Accessibility for that.
@@ -101,35 +103,47 @@ driver.onRotate = { delta, rate in
     }
 }
 
+// Click and double-click actions apply the same regardless of rotation mode (Scroll/Audio/
+// Keypress) — only an active menu/submenu (via Accessibility) overrides them, so PowerMate can
+// still confirm menu selections.
 driver.onClick = {
     // Defer by one run-loop cycle so that any rotation in the same HID report is processed
     // first (the driver handles button-change before rotation within each report block).
     // This ensures _didRotateWhileButtonDown is set before we decide whether to act.
     DispatchQueue.main.async {
         guard !_didRotateWhileButtonDown else { return }
-        let settings = currentSettings()
         if useMenuBehavior() {
             postKey(kReturnKey)
             // Do not exit menu mode here: a submenu may open and we need to keep sending arrow keys.
             // Menu mode will exit on the 5-second timeout when the user stops rotating.
-        } else if useAudioBehavior(mode: settings.mode) {
-            let shiftHeld = NSEvent.modifierFlags.contains(.shift)
-            switch settings.clickAction {
-            case .mute:      shiftHeld ? togglePlayPause() : toggleMute()
-            case .playPause: shiftHeld ? toggleMute()      : togglePlayPause()
-            }
         } else {
             exitMenuMode()
-            postMouseClick(button: .left)
+            performClickAction(currentSettings().clickAction)
         }
     }
+}
+
+driver.onDoubleClick = {
+    DispatchQueue.main.async {
+        guard !_didRotateWhileButtonDown else { return }
+        exitMenuMode()
+        performClickAction(currentSettings().doubleClickAction)
+    }
+}
+
+// Skip the double-click detection wait unless a real double-click action is configured (so
+// single clicks stay instantaneous for anyone not using this feature), and while a menu is
+// focused (so PowerMate's Return-key confirmation isn't delayed by the detection window).
+driver.shouldWaitForDoubleClick = {
+    !useMenuBehavior() && currentSettings().doubleClickAction != .none
 }
 
 driver.onLongPress = {
     DispatchQueue.main.async {
         guard !_didRotateWhileButtonDown else { return }
         // The action itself is resolved per-app (frontmost app's override, or the default).
-        switch currentSettings().longPressAction {
+        let settings = currentSettings()
+        switch settings.longPressAction {
         case .rightClick:
             enterMenuMode()
             postMouseClick(button: .right)
@@ -169,10 +183,14 @@ driver.onLongPress = {
                 menuHandler.updateMenuState()
             }
         case .runScript:
+            // settings.script1/2 is a per-app override; nil means "no override", not "empty
+            // script" — fall back to the global default from Configure Scripts... in that case.
             let command = NSEvent.modifierFlags.contains(.shift)
-                ? defaults.string(forKey: kScript2) ?? ""
-                : defaults.string(forKey: kScript1) ?? ""
+                ? (settings.script2 ?? defaults.string(forKey: kScript2) ?? "")
+                : (settings.script1 ?? defaults.string(forKey: kScript1) ?? "")
             runScript(command)
+        case .custom(let binding):
+            postKey(binding.keyCode, flags: binding.flags)
         }
     }
 }

@@ -21,6 +21,10 @@ var perAppSettings: [String: AppSettings] = loadPerAppSettings()
 
 /// Loads the persisted default settings, migrating from the individual flat UserDefaults
 /// keys used before per-app settings existed if this is the first run on this build.
+/// AppSettings.init(from:) is written to decode leniently (falling back to defaults for any
+/// field that didn't exist in an older build), so the branch below only runs for installs from
+/// before per-app settings existed at all (pre-1.0.17) — anyone with a 1.0.17+ blob, however old
+/// its shape, decodes it directly instead of falling through here.
 private func loadDefaultSettings() -> AppSettings {
     if let data = defaults.data(forKey: kDefaultAppSettings),
        let decoded = try? JSONDecoder().decode(AppSettings.self, from: data) {
@@ -31,7 +35,13 @@ private func loadDefaultSettings() -> AppSettings {
     settings.fineScrollEnabled = defaults.bool(forKey: kFineScroll)
     settings.scrollAxesSwapped = defaults.bool(forKey: kScrollAxesSwapped)
     settings.audioStepSwapped  = defaults.bool(forKey: kAudioStepSwapped)
-    settings.clickAction = defaults.string(forKey: kClickAction) == "playPause" ? .playPause : .mute
+    // clickAction used to only apply in audio mode; preserve that for existing users instead of
+    // migrating a stored mute/playPause value that was never actually exercised outside audio mode.
+    if defaults.bool(forKey: kAudioControl) {
+        settings.clickAction = defaults.string(forKey: kClickAction) == "playPause" ? .playPause : .mute
+    } else {
+        settings.clickAction = .leftClick
+    }
     switch defaults.string(forKey: kLongPressAction) {
     case "doubleClick":      settings.longPressAction = .doubleClick
     case "toggleAudioMode":  settings.longPressAction = .toggleMode(.audioScroll)

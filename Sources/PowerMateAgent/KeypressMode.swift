@@ -27,7 +27,7 @@ enum TurnSlot: String, CaseIterable, Codable {
     }
 }
 
-struct KeyBinding: Codable {
+struct KeyBinding: Codable, Equatable {
     var keyCode: CGKeyCode
     var label: String
     // CGEventFlags.rawValue; stored as a plain UInt64 since CGEventFlags itself isn't Codable.
@@ -234,6 +234,44 @@ final class KeyCaptureButton: NSButton {
         monitor = nil
         if KeyCaptureButton.activeCapture === self { KeyCaptureButton.activeCapture = nil }
     }
+}
+
+// MARK: - Custom keypress menu/pop-up titling
+
+/// The title for a "Custom Keypress" menu item or pop-up entry: shows the recorded key once one
+/// has been set, so the choice is visible without opening the capture dialog again.
+func customKeypressTitle(_ binding: KeyBinding?) -> String {
+    binding.map { "Custom Keypress: \($0.label)" } ?? "Custom Keypress..."
+}
+
+// MARK: - Single custom-keypress capture dialog
+
+/// Presents a small dialog with one key-capture control for picking a single custom keypress —
+/// used by the Click/Double-click/Long-press "Custom Keypress" actions, as opposed to the
+/// per-direction/per-modifier grid `showConfigureKeypressMode` uses for Keypress mode. Seeded
+/// with `current` if the action was already set to a custom keypress. Returns the recorded
+/// binding, or nil if the dialog was cancelled.
+@discardableResult
+func showCaptureCustomKeypress(current: KeyBinding?) -> KeyBinding? {
+    let alert = NSAlert()
+    alert.messageText = "Custom Keypress"
+    alert.informativeText = "Click the button below, then press the key you want sent. Hold Control/Option/Shift/Command as part of the press to include them, e.g. Control-Option-{ or Command-Shift-Q."
+    alert.addButton(withTitle: "Save")
+    alert.addButton(withTitle: "Cancel")
+
+    let seed = current ?? KeyBinding(keyCode: kReturnKey, label: namedKeyLabels[kReturnKey] ?? "⏎ Return")
+    let button = KeyCaptureButton(binding: seed)
+    let width: CGFloat = 160
+    let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: 26))
+    button.frame = NSRect(x: (width - 120) / 2, y: 0, width: 120, height: 26)
+    container.addSubview(button)
+    alert.accessoryView = container
+
+    NSApp.activate(ignoringOtherApps: true)
+    let response = alert.runModal()
+    button.cancelCapture()
+
+    return response == .alertFirstButtonReturn ? button.binding : nil
 }
 
 // MARK: - Configure Keypress Mode dialog
