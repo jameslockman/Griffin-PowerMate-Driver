@@ -130,7 +130,43 @@ extension AppSettings {
     }
 }
 
-// MARK: - Dispatch
+// MARK: - Real-time modifier tracking
+
+/// The real, currently-held keyboard modifier state — tracked by directly observing genuine
+/// `.flagsChanged` events, rather than polling any OS-level shared/aggregate state table.
+///
+/// Two earlier approaches both polled a shared table at read time: first `NSEvent.modifierFlags`
+/// (`CGEventSourceStateID.combinedSessionState`), then `CGEventSourceStateID.hidSystemState`.
+/// Both are affected by posted synthetic key events — postKey posts a keyDown/keyUp for the
+/// configured Turn key with an explicit `.flags` value (usually empty, since most recorded
+/// bindings have no baked-in modifier of their own), and apparently that can still leak into
+/// either table under the right timing, most noticeably right at a direction reversal (rapid
+/// back-to-back reports). Tracking modifier state ourselves via NSEvent's monitor APIs sidesteps
+/// this rather than hoping some other shared table happens to be immune: our posted Turn-mode
+/// keys are regular (non-modifier) virtual keys, so they're always delivered as keyDown/keyUp,
+/// never `.flagsChanged` — they can't feed back into this value at all. The only latency left is
+/// the same small, unavoidable gap any two independent HID devices (the keyboard and the
+/// PowerMate) have relative to each other.
+private(set) var realModifierFlags: CGEventFlags = []
+
+private var _globalModifierMonitor: Any?
+private var _localModifierMonitor: Any?
+
+/// Starts observing real keyboard modifier transitions. Call once at startup. A global NSEvent
+/// monitor for keyboard-type events requires Accessibility permission, already required
+/// elsewhere in this app for menu detection, so this doesn't prompt for anything new.
+func startTrackingRealModifierFlags() {
+    realModifierFlags = cgEventFlags(from: NSEvent.modifierFlags)
+    _globalModifierMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { event in
+        realModifierFlags = cgEventFlags(from: event.modifierFlags)
+    }
+    // Global monitors don't see events delivered to this app's own key window (e.g. while a
+    // Configure... dialog is focused) — a local monitor covers that case too.
+    _localModifierMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+        realModifierFlags = cgEventFlags(from: event.modifierFlags)
+        return event
+    }
+}
 
 /// Sends the configured key (from `settings`) for the given turn direction/slot, once per
 /// unit of rotation.
@@ -140,6 +176,20 @@ func postTurnKeypress(delta: Int, slot: TurnSlot, settings: AppSettings) {
     for _ in 0 ..< abs(delta) {
         postKey(key.keyCode, flags: key.flags)
     }
+    // Courtesy re-broadcast so anything else that reads the session-combined table (e.g. another
+    // app's own NSEvent.modifierFlags check) also sees the truth, not whatever flags postKey's
+    // calls above just left it with. Harmless even though we no longer rely on it ourselves.
+    refreshSessionModifierState()
+}
+
+private func refreshSessionModifierState() {
+    // A keyboard event whose virtual key is one of the standard modifier codes is delivered as
+    // a .flagsChanged event regardless of the `keyDown` parameter — what actually updates the
+    // tracked state is the event's own .flags field, which we set from the (uncorrupted)
+    // hardware-state read above.
+    guard let event = CGEvent(keyboardEventSource: kHIDEventSource, virtualKey: 0x38 /* kVK_Shift */, keyDown: true) else { return }
+    event.flags = realModifierFlags
+    event.post(tap: .cghidEventTap)
 }
 
 // MARK: - Key labeling

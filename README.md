@@ -252,6 +252,12 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 
 ### Versions
 
+#### 1.0.19
+
+**Fixed a Configure Applications display bug**: the Click/Double-click/Long press "Custom Keypress..." menu item could show a *different* app's previously-recorded key while browsing another app in **Configure Applications...** (e.g. selecting Logic Pro's Custom Keypress, then switching to Garage Band, still showed Logic's key next to "Custom Keypress..."). The stored, per-app setting was never actually affected — this was purely the shared menu item's label failing to reset — but it looked like apps were silently sharing keypresses. Reported in [#26](https://github.com/jameslockman/Griffin-PowerMate-Driver/issues/26).
+
+**Fixed Keypress Mode dropping held modifiers mid-turn**: holding Shift/Option/Command while continuously turning the knob could send the correct modified key once and then silently fall back to the plain "Turn" key for the rest of the gesture, or occasionally drop the modifier right at a direction reversal. Caused by reading modifier state from an OS-level table that our own synthesized keystrokes could overwrite. Fixed by tracking real modifier-key transitions directly instead of polling a shared table.
+
 #### 1.0.18
 
 **Click, Double-click, and Long press are now grouped together** in the menu and in Configure Applications, and apply the same regardless of which rotation mode (Scroll/Audio/Keypress) is active — previously "Click" only did anything in Audio mode. Click can be set to Left-click, Right-click, Mute/Unmute, Play/Pause, or a **Custom Keypress** you record.
