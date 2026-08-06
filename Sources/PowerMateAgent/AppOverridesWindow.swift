@@ -408,8 +408,17 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
 
         clickActionLabel.isHidden = false
         clickActionPopup.isHidden = false
+        // clickCustomMenuItem is one shared NSMenuItem reused for every app in the list, so its
+        // title must be refreshed for the app being displayed right now — even when that app's
+        // action *isn't* custom, where it needs to fall back to the plain "Custom Keypress..."
+        // label. Leaving this inside the `.custom` branch only (as before) meant the item kept
+        // showing whichever other app's custom key was displayed most recently: e.g. selecting
+        // Logic Pro (Custom Keypress: Space) and then Garage Band (Left-click) still showed
+        // "Custom Keypress: Space" for Garage Band, even though Garage Band's real setting was
+        // untouched — a purely cosmetic staleness bug, but one that looked exactly like Garage
+        // Band's click had been silently overwritten with Logic's.
+        clickCustomMenuItem.title = customKeypressTitle(settings.clickAction.customBinding)
         if case .custom = settings.clickAction {
-            clickCustomMenuItem.title = customKeypressTitle(settings.clickAction.customBinding)
             clickActionPopup.select(clickCustomMenuItem)
         } else if let match = clickActionMenuItems.first(where: { ($0.representedObject as? ClickAction) == settings.clickAction }) {
             clickActionPopup.select(match)
@@ -417,8 +426,8 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
 
         doubleClickActionLabel.isHidden = false
         doubleClickActionPopup.isHidden = false
+        doubleClickCustomMenuItem.title = customKeypressTitle(settings.doubleClickAction.customBinding)
         if case .custom = settings.doubleClickAction {
-            doubleClickCustomMenuItem.title = customKeypressTitle(settings.doubleClickAction.customBinding)
             doubleClickActionPopup.select(doubleClickCustomMenuItem)
         } else if let match = doubleClickActionMenuItems.first(where: { ($0.representedObject as? ClickAction) == settings.doubleClickAction }) {
             doubleClickActionPopup.select(match)
@@ -426,8 +435,8 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
 
         longPressLabel.isHidden = false
         longPressPopup.isHidden = false
+        longPressCustomMenuItem.title = customKeypressTitle(settings.longPressAction.customBinding)
         if case .custom = settings.longPressAction {
-            longPressCustomMenuItem.title = customKeypressTitle(settings.longPressAction.customBinding)
             longPressPopup.select(longPressCustomMenuItem)
         } else if let match = longPressMenuItems.first(where: { ($0.representedObject as? LongPressAction) == settings.longPressAction }) {
             longPressPopup.select(match)

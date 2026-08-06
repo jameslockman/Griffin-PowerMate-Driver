@@ -35,6 +35,21 @@ var lastRotationTime: CFTimeInterval = 0
 // Tracks whether rotation occurred while the button was held, so the subsequent
 // button-up click can be suppressed (avoiding an unintended mute/click after track skip).
 private var _didRotateWhileButtonDown = false
+
+// Keypress Mode modifier-slot debounce: realModifierFlags occasionally still misreads a held
+// modifier as released for a single tick (a residual timing race — see its doc comment), most
+// noticeably right at a direction reversal. Since that corruption can only produce a false
+// negative (looks released when it's actually still held), never a false positive, a freshly
+// *detected* modifier is always honored immediately, but a sudden drop back to "no modifier"
+// only takes effect after it's read absent for a couple of consecutive ticks in a row — a
+// genuine release stays released; a transient glitch doesn't.
+private var _stickyKeypressSlot: TurnSlot = .plain
+private var _keypressModifierAbsentStreak = 0
+private let kKeypressModifierDebounceTicks = 2
+/// A gap longer than this between rotation events means turning actually stopped (continuous
+/// turning generates reports far more often than this, even slowly) — treated as the start of a
+/// new gesture, resetting _stickyKeypressSlot rather than carrying it over from before the pause.
+private let kKeypressGestureGapThreshold: CFTimeInterval = 0.3
 // Accumulates rotation units while button is held; a track skip fires every kTrackSkipThreshold units.
 private var _trackSkipAccumulator = 0
 private let kTrackSkipThreshold = 5
@@ -42,7 +57,12 @@ private let kTrackSkipThreshold = 5
 // MARK: - Driver callbacks
 
 driver.onRotate = { delta, rate in
-    lastRotationTime = CFAbsoluteTimeGetCurrent()
+    let now = CFAbsoluteTimeGetCurrent()
+    if lastRotationTime > 0 && now - lastRotationTime > kKeypressGestureGapThreshold {
+        _stickyKeypressSlot = .plain
+        _keypressModifierAbsentStreak = 0
+    }
+    lastRotationTime = now
     startThrob()
     // Resolved once per event: the frontmost app's override, or the global default.
     let settings = currentSettings()
@@ -85,10 +105,29 @@ driver.onRotate = { delta, rate in
         let presses = fine ? 1 : abs(delta)
         adjustVolume(up: up, fine: fine, presses: presses)
     } else if useKeypressBehavior(mode: settings.mode) {
-        let shiftHeld   = NSEvent.modifierFlags.contains(.shift)
-        let optionHeld  = NSEvent.modifierFlags.contains(.option)
-        let commandHeld = NSEvent.modifierFlags.contains(.command)
-        let slot: TurnSlot = commandHeld ? .command : optionHeld ? .option : shiftHeld ? .shift : .plain
+        // realModifierFlags (not NSEvent.modifierFlags) — immune to the modifier state our own
+        // postTurnKeypress calls below can otherwise corrupt; see its doc comment.
+        let flags       = realModifierFlags
+        let shiftHeld   = flags.contains(.maskShift)
+        let optionHeld  = flags.contains(.maskAlternate)
+        let commandHeld = flags.contains(.maskCommand)
+        let freshSlot: TurnSlot = commandHeld ? .command : optionHeld ? .option : shiftHeld ? .shift : .plain
+
+        // Debounce a drop back to .plain — see _stickyKeypressSlot's comment above. Any freshly
+        // detected modifier is trusted immediately regardless.
+        let slot: TurnSlot
+        if freshSlot != .plain {
+            slot = freshSlot
+            _stickyKeypressSlot = freshSlot
+            _keypressModifierAbsentStreak = 0
+        } else if _stickyKeypressSlot != .plain && _keypressModifierAbsentStreak < kKeypressModifierDebounceTicks {
+            slot = _stickyKeypressSlot
+            _keypressModifierAbsentStreak += 1
+        } else {
+            slot = .plain
+            _stickyKeypressSlot = .plain
+            _keypressModifierAbsentStreak = 0
+        }
         postTurnKeypress(delta: delta, slot: slot, settings: settings)
     } else {
         let shiftHeld  = NSEvent.modifierFlags.contains(.shift)
@@ -227,6 +266,11 @@ buildMenu()
 // MARK: - Startup
 
 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+    // Registers a global NSEvent monitor. Deferred here, after the run loop is up and the app's
+    // normal Cocoa lifecycle (NSApplication.shared/app.delegate/buildMenu() above) has settled,
+    // rather than run inline during startup — an earlier attempt called it before NSApp had been
+    // touched at all, which broke the status-item menu from opening entirely.
+    startTrackingRealModifierFlags()
     if driver.isConnected {
         setLEDOffMain(80)
     }
