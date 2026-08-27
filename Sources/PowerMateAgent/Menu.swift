@@ -190,8 +190,10 @@ final class MenuHandler: NSObject, NSMenuDelegate {
 
     @objc func toggleHideDockIcon() {
         defaults.set(!defaults.bool(forKey: kHideDockIcon), forKey: kHideDockIcon)
-        updateDockIconVisibility()
         updateMenuState()
+        DispatchQueue.main.async {
+            updateDockIconVisibility()
+        }
     }
 
     private func setLongPressAction(_ action: LongPressAction) {
@@ -361,6 +363,11 @@ func buildMenu() {
     menuHandler.audioStepSwappedItem = audioStepSwappedItem
     menu.addItem(audioStepSwappedItem)
 
+    let hideDockIconItem = NSMenuItem(title: "Hide dock icon", action: #selector(MenuHandler.toggleHideDockIcon), keyEquivalent: "")
+    hideDockIconItem.target = menuHandler
+    menuHandler.hideDockIconItem = hideDockIconItem
+    menu.addItem(hideDockIconItem)
+
     menu.addItem(NSMenuItem.separator())
 
     let keypressModeItem = NSMenuItem(title: "Keypress mode", action: #selector(MenuHandler.toggleKeypressMode), keyEquivalent: "")
@@ -508,11 +515,6 @@ func buildMenu() {
     let configAppsItem = NSMenuItem(title: "Configure Applications...", action: #selector(MenuHandler.configureApplications), keyEquivalent: "")
     configAppsItem.target = menuHandler
     menu.addItem(configAppsItem)
-
-    let hideDockIconItem = NSMenuItem(title: "Hide dock icon", action: #selector(MenuHandler.toggleHideDockIcon), keyEquivalent: "")
-    hideDockIconItem.target = menuHandler
-    menuHandler.hideDockIconItem = hideDockIconItem
-    menu.addItem(hideDockIconItem)
 
     menu.addItem(updateAvailableItem)
 

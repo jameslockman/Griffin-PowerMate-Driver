@@ -107,12 +107,13 @@ func isStatusItemBehindNotch() -> Bool {
     return inMenuBarStrip && distanceFromCenter < notchHalfWidth
 }
 
-var dockIconVisible = false
+var dockIconVisible: Bool {
+    NSApp.activationPolicy() == .regular
+}
 
 func updateDockIconVisibility() {
     let shouldShowDock = !defaults.bool(forKey: kHideDockIcon) && isStatusItemBehindNotch()
     guard shouldShowDock != dockIconVisible else { return }
-    dockIconVisible = shouldShowDock
     if shouldShowDock {
         // Set image before and after the policy change; setActivationPolicy may
         // briefly reset applicationIconImage to the bundle default.
