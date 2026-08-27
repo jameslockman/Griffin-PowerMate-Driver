@@ -110,7 +110,7 @@ func isStatusItemBehindNotch() -> Bool {
 var dockIconVisible = false
 
 func updateDockIconVisibility() {
-    let shouldShowDock = isStatusItemBehindNotch()
+    let shouldShowDock = !defaults.bool(forKey: kHideDockIcon) && isStatusItemBehindNotch()
     guard shouldShowDock != dockIconVisible else { return }
     dockIconVisible = shouldShowDock
     if shouldShowDock {

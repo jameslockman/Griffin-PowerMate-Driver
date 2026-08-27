@@ -66,6 +66,8 @@ The **VU Meter** (LED amplitude display) can be toggled independently of audio m
 
 **Notch-aware Dock icon**: On MacBooks with a camera notch, the menu bar icon can be pushed behind the camera housing when many items are present. PowerMate Agent detects this automatically and shows a Dock icon so you can still access the menu. The Dock icon reflects the same three states (not connected, scroll mode, audio mode) as the menu bar icon. It disappears from the Dock when the menu bar icon is visible again.
 
+Use **Hide dock icon** to disable this fallback; the preference is saved across launches.
+
 | **Menu icon** | **Dock Icon** | **What it means** |
 |------------|---------|---------|
 | ![No PowerMate Connected menu icon](/images/noPowermate.png) | <img src="/images/DockIconDisconnected.png" alt="Device Unavailable" width="100"/> | No PowerMate connected to the computer. |

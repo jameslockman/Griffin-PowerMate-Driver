@@ -23,6 +23,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     var doubleClickPlayPauseItem: NSMenuItem!
     var doubleClickCustomItem: NSMenuItem!
     var vuMeterItem: NSMenuItem!
+    var hideDockIconItem: NSMenuItem!
     var longPressRightItem: NSMenuItem!
     var longPressLeftItem: NSMenuItem!
     var longPressDoubleItem: NSMenuItem!
@@ -55,6 +56,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         doubleClickCustomItem.state    = (defaultSettings.doubleClickAction.customBinding != nil) ? .on : .off
         doubleClickCustomItem.title    = customKeypressTitle(defaultSettings.doubleClickAction.customBinding)
         vuMeterItem.state             = vuMeterEnabled ? .on : .off
+        hideDockIconItem.state        = defaults.bool(forKey: kHideDockIcon) ? .on : .off
         longPressRightItem.state               = (defaultSettings.longPressAction == .rightClick) ? .on : .off
         longPressLeftItem.state                = (defaultSettings.longPressAction == .leftClick) ? .on : .off
         longPressDoubleItem.state              = (defaultSettings.longPressAction == .doubleClick) ? .on : .off
@@ -183,6 +185,12 @@ final class MenuHandler: NSObject, NSMenuDelegate {
                 setLEDOffMain(80)
             }
         }
+        updateMenuState()
+    }
+
+    @objc func toggleHideDockIcon() {
+        defaults.set(!defaults.bool(forKey: kHideDockIcon), forKey: kHideDockIcon)
+        updateDockIconVisibility()
         updateMenuState()
     }
 
@@ -500,6 +508,11 @@ func buildMenu() {
     let configAppsItem = NSMenuItem(title: "Configure Applications...", action: #selector(MenuHandler.configureApplications), keyEquivalent: "")
     configAppsItem.target = menuHandler
     menu.addItem(configAppsItem)
+
+    let hideDockIconItem = NSMenuItem(title: "Hide dock icon", action: #selector(MenuHandler.toggleHideDockIcon), keyEquivalent: "")
+    hideDockIconItem.target = menuHandler
+    menuHandler.hideDockIconItem = hideDockIconItem
+    menu.addItem(hideDockIconItem)
 
     menu.addItem(updateAvailableItem)
 
