@@ -327,9 +327,12 @@ wsCenter.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: ni
 
 // MARK: - Dock icon visibility
 
-// Apply the saved preference after applicationWillFinishLaunching initially sets accessory.
-DispatchQueue.main.async {
-    updateDockIconVisibility()
+// Periodically check whether the status item is visible in the menu bar.
+// If it is hidden (notch overlap or overflow >>) show a Dock icon so the user
+// can still access the menu. Check starts after a short delay to let the
+// status item settle into its position on launch.
+DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+    updateDockIconVisibilityAndTimer()
 }
 
 app.run()

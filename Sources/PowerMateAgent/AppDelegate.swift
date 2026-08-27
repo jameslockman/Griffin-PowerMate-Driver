@@ -2,8 +2,10 @@ import Foundation
 import AppKit
 
 class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Start as an accessory while launching; the saved "Hide dock icon" preference is applied
-    /// after the application enters its run loop.
+    /// Hide the dock icon as early as possible. Without LSUIElement in Info.plist, macOS would
+    /// show a dock icon by default; calling setActivationPolicy here suppresses it before the
+    /// launch sequence completes. The dock icon is shown dynamically when the status item is
+    /// hidden behind the camera notch.
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
     }

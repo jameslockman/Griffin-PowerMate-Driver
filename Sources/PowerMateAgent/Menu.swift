@@ -192,7 +192,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         defaults.set(!defaults.bool(forKey: kHideDockIcon), forKey: kHideDockIcon)
         updateMenuState()
         DispatchQueue.main.async {
-            updateDockIconVisibility()
+            updateDockIconVisibilityAndTimer()
         }
     }
 

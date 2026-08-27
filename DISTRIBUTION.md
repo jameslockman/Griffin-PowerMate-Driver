@@ -29,7 +29,7 @@ chmod +x scripts/build-app.sh
 ./scripts/build-app.sh
 ```
 
-This produces **`.build/release/PowerMate Agent.app`** (release binary + Info.plist). The app shows both menu-bar and Dock icons by default; users can hide the Dock icon from its menu.
+This produces **`.build/release/PowerMate Agent.app`** (release binary + Info.plist). The script sets `LSUIElement = true` so the app runs as a menu-bar-style agent without a dock icon.
 
 ## 3. Sign the app
 
