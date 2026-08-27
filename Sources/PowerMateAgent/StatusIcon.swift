@@ -3,12 +3,18 @@ import AppKit
 
 // MARK: - Icon loading
 
+private let dockIconInsetRatio: CGFloat = 0.1 // macOS app icons keep roughly 10% inset per edge.
+
 /// Load a named icon from the bundle, checking .icns first then .png.
 private func loadBundleIcon(_ name: String) -> NSImage? {
     for ext in ["icns", "png"] {
         if let path = Bundle.main.path(forResource: name, ofType: ext),
            let img = NSImage(contentsOfFile: path) {
-            return img
+            return NSImage(size: img.size, flipped: false) { bounds in
+                let inset = bounds.width * dockIconInsetRatio
+                img.draw(in: bounds.insetBy(dx: inset, dy: inset))
+                return true
+            }
         }
     }
     return nil
@@ -107,12 +113,15 @@ func isStatusItemBehindNotch() -> Bool {
     return inMenuBarStrip && distanceFromCenter < notchHalfWidth
 }
 
-var dockIconVisible = false
+var dockIconVisible: Bool {
+    NSApp.activationPolicy() == .regular
+}
+
+private var dockVisibilityTimer: Timer?
 
 func updateDockIconVisibility() {
-    let shouldShowDock = isStatusItemBehindNotch()
+    let shouldShowDock = !defaults.bool(forKey: kHideDockIcon) && isStatusItemBehindNotch()
     guard shouldShowDock != dockIconVisible else { return }
-    dockIconVisible = shouldShowDock
     if shouldShowDock {
         // Set image before and after the policy change; setActivationPolicy may
         // briefly reset applicationIconImage to the bundle default.
@@ -124,4 +133,16 @@ func updateDockIconVisibility() {
         NSApp.setActivationPolicy(.accessory)
         NSApp.applicationIconImage = nil  // restore default when hidden
     }
+}
+
+func updateDockIconVisibilityAndTimer() {
+    dockVisibilityTimer?.invalidate()
+    dockVisibilityTimer = nil
+    updateDockIconVisibility()
+    guard !defaults.bool(forKey: kHideDockIcon) else { return }
+
+    dockVisibilityTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+        updateDockIconVisibility()
+    }
+    dockVisibilityTimer?.tolerance = 0.2
 }
