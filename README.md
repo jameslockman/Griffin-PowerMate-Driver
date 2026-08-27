@@ -24,7 +24,7 @@ Once installed, PowerMate Agent will appear in your menu bar.
 
 ![Where to find PowerMate Agent](/images/menuBar.png)
 
-If the menu bar is hidden by the notch on a laptop display, then PowerMate Agent will appear in your dock.
+PowerMate Agent appears in the menu bar and Dock by default; select **Hide dock icon** in the menu to suppress the Dock icon, and the choice persists across launches.
 
 The PowerMate acts as a scroll control, so if the active window or control has a scroll option, turning the dial will scroll the window or increase/decrease selected value. You can reverse the scroll direction if you don't like the default scroll direction.
 
@@ -64,9 +64,7 @@ The **VU Meter** (LED amplitude display) can be toggled independently of audio m
 
 <img width="450"  alt="Script execution mode" src="/images/configureApplications.png" />
 
-**Notch-aware Dock icon**: On MacBooks with a camera notch, the menu bar icon can be pushed behind the camera housing when many items are present. PowerMate Agent detects this automatically and shows a Dock icon so you can still access the menu. The Dock icon reflects the same three states (not connected, scroll mode, audio mode) as the menu bar icon. It disappears from the Dock when the menu bar icon is visible again.
-
-Use **Hide dock icon** to disable this fallback; the preference is saved across launches.
+**Dock icon**: The Dock icon reflects the same three states (not connected, scroll mode, audio mode) as the menu bar icon.
 
 | **Menu icon** | **Dock Icon** | **What it means** |
 |------------|---------|---------|
@@ -102,7 +100,7 @@ AIFF or WAV are recommended. If a file is absent the built-in system sound is us
 
 ### Custom Dock icons
 
-When the Dock icon is visible (notch fallback), you can supply your own icons. Place ICNS files in `scripts/Icons/` before building:
+When the Dock icon is visible, you can supply your own icons. Place ICNS files in `scripts/Icons/` before building:
 
 | File | Shown when |
 |---|---|

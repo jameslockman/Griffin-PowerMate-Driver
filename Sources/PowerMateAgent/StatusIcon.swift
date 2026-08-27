@@ -72,47 +72,14 @@ func updateStatusIcon() {
     }
 }
 
-// MARK: - Notch / dock icon visibility
-
-/// Returns true if the status item's window is positioned behind the camera notch.
-/// safeAreaInsets.top > 0 confirms a notch is present; the horizontal notch extent
-/// is estimated as ±6% of screen width from center (covers all current MacBook Pro models).
-func isStatusItemBehindNotch() -> Bool {
-    guard #available(macOS 12.0, *),
-          let window = statusItem.button?.window,
-          window.isVisible else { return false }
-
-    let itemFrame = window.frame
-    let screen = NSScreen.screens.first(where: { $0.frame.intersects(itemFrame) }) ?? NSScreen.main
-    guard let screen else { return false }
-
-    let insets = screen.safeAreaInsets
-    guard insets.top > 0 else { return false }  // no notch on this screen
-
-    let sf = screen.frame
-
-    // Confirm item is in the top menu-bar strip.
-    let inMenuBarStrip = itemFrame.maxY >= sf.maxY - insets.top
-
-    // The notch occupies the horizontal center of the screen. safeAreaInsets gives
-    // us the notch height but not its width. On all current MacBook Pro models the
-    // notch is roughly 12% of screen width total, so ±6% from center.
-    let notchHalfWidth = sf.width * 0.06
-
-    // Use the inner edge (the edge of the item closest to screen center) so that
-    // partial overlap is detected correctly.
-    let innerEdgeX = itemFrame.midX > sf.midX ? itemFrame.minX : itemFrame.maxX
-    let distanceFromCenter = abs(innerEdgeX - sf.midX)
-
-    return inMenuBarStrip && distanceFromCenter < notchHalfWidth
-}
+// MARK: - Dock icon visibility
 
 var dockIconVisible: Bool {
     NSApp.activationPolicy() == .regular
 }
 
 func updateDockIconVisibility() {
-    let shouldShowDock = !defaults.bool(forKey: kHideDockIcon) && isStatusItemBehindNotch()
+    let shouldShowDock = !defaults.bool(forKey: kHideDockIcon)
     guard shouldShowDock != dockIconVisible else { return }
     if shouldShowDock {
         // Set image before and after the policy change; setActivationPolicy may
