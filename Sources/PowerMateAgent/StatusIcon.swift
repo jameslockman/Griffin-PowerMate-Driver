@@ -3,12 +3,18 @@ import AppKit
 
 // MARK: - Icon loading
 
+private let dockIconInsetRatio: CGFloat = 0.1 // macOS app icons keep roughly 10% inset per edge.
+
 /// Load a named icon from the bundle, checking .icns first then .png.
 private func loadBundleIcon(_ name: String) -> NSImage? {
     for ext in ["icns", "png"] {
         if let path = Bundle.main.path(forResource: name, ofType: ext),
            let img = NSImage(contentsOfFile: path) {
-            return img
+            return NSImage(size: img.size, flipped: false) { bounds in
+                let inset = bounds.width * dockIconInsetRatio
+                img.draw(in: bounds.insetBy(dx: inset, dy: inset))
+                return true
+            }
         }
     }
     return nil
