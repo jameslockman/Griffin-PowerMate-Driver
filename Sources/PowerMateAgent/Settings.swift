@@ -179,12 +179,18 @@ struct AppSettings: Codable {
     /// the global default script from Configure Scripts...", not "run an empty script".
     var script1: String?
     var script2: String?
+    /// Key held down for exactly as long as the PowerMate button is held, for push-to-talk
+    /// style targets (e.g. dictation bound to a bare Fn). nil — the default — means the
+    /// button keeps its normal click/double-click/long-press behavior; when set, those
+    /// gestures are suppressed for the duration of the press (see main.swift).
+    var holdKey: KeyBinding?
 }
 
 extension AppSettings {
     private enum CodingKeys: String, CodingKey {
         case mode, scrollReversed, fineScrollEnabled, scrollAxesSwapped, audioStepSwapped
         case clickAction, doubleClickAction, longPressAction, keypressBindings, script1, script2
+        case holdKey
     }
 
     /// Decodes leniently: a key missing from the stored JSON (because it was saved by an older
@@ -222,5 +228,6 @@ extension AppSettings {
         keypressBindings  = try container.decodeIfPresent([TurnDirection: [TurnSlot: KeyBinding]].self, forKey: .keypressBindings) ?? fallback.keypressBindings
         script1 = try container.decodeIfPresent(String.self, forKey: .script1)
         script2 = try container.decodeIfPresent(String.self, forKey: .script2)
+        holdKey = try container.decodeIfPresent(KeyBinding.self, forKey: .holdKey)
     }
 }
