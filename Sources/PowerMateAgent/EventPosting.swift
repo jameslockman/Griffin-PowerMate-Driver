@@ -51,6 +51,61 @@ func postKey(_ keyCode: CGKeyCode, flags: CGEventFlags = []) {
     up.post(tap: .cghidEventTap)
 }
 
+// MARK: - Held keys (press and release as separate events)
+
+// Stamped into kCGEventSourceUserData on every keyboard event this app synthesizes, so our
+// own global .flagsChanged monitor can tell our events apart from real hardware ones (see
+// isSelfSynthesized / startTrackingRealModifierFlags in KeypressMode.swift). Real events
+// carry 0 here. The value is arbitrary; it only has to be non-zero and stable.
+let kSelfSynthesizedEventTag: Int64 = 0x504D4147 // 'PMAG'
+
+/// Marks an event as ours. Call on every keyboard event this app posts.
+func tagAsSelfSynthesized(_ event: CGEvent) {
+    event.setIntegerValueField(.eventSourceUserData, value: kSelfSynthesizedEventTag)
+}
+
+/// The CGEventFlags bit a modifier key code asserts while held, or nil if `keyCode` is not a
+/// modifier. Modifier keys are never delivered as keyDown/keyUp — the window server reports
+/// them as .flagsChanged whose .flags field carries the resulting modifier state — so a
+/// synthesized hold has to be built the same way to be believed (measured against MacWhisper's
+/// push-to-talk with a bare Fn, which ignores a keyDown-shaped 0x3F entirely).
+func modifierFlag(forKeyCode keyCode: CGKeyCode) -> CGEventFlags? {
+    switch keyCode {
+    case 0x37, 0x36: return .maskCommand   // Command, Right Command
+    case 0x38, 0x3C: return .maskShift     // Shift, Right Shift
+    case 0x3A, 0x3D: return .maskAlternate // Option, Right Option
+    case 0x3B, 0x3E: return .maskControl   // Control, Right Control
+    case 0x3F:       return .maskSecondaryFn
+    default:         return nil
+    }
+}
+
+private func postHeld(_ keyCode: CGKeyCode, flags: CGEventFlags, down: Bool) {
+    guard let event = CGEvent(keyboardEventSource: kHIDEventSource, virtualKey: keyCode, keyDown: down) else { return }
+    if let modifier = modifierFlag(forKeyCode: keyCode) {
+        event.type = .flagsChanged
+        // Down asserts the modifier (plus anything baked into the recorded binding); up clears
+        // the whole field rather than subtracting one bit. Clearing can only ever release a
+        // modifier, never leave one stuck, and the OS re-asserts the truth on the user's next
+        // real modifier transition.
+        event.flags = down ? flags.union(modifier) : []
+    } else {
+        event.flags = flags
+    }
+    tagAsSelfSynthesized(event)
+    event.post(tap: .cghidEventTap)
+}
+
+/// Press `keyCode` and leave it down. Pair every call with `postKeyUp` for the same key code.
+func postKeyDown(_ keyCode: CGKeyCode, flags: CGEventFlags = []) {
+    postHeld(keyCode, flags: flags, down: true)
+}
+
+/// Release a key previously pressed with `postKeyDown`.
+func postKeyUp(_ keyCode: CGKeyCode, flags: CGEventFlags = []) {
+    postHeld(keyCode, flags: flags, down: false)
+}
+
 // MARK: - Mouse
 
 /// Convert Cocoa screen point (bottom-left origin) to Quartz (top-left origin).
