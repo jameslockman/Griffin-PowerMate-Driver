@@ -249,7 +249,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
             ("Prefer Fine scrolling", " – Scroll by single-pixel increments instead of the default coarse step for precise control."),
             ("Keypress mode", " – Turning sends a configured keystroke instead of scrolling (disables Audio mode). Configure the keys, including Shift/Option/Command/Press variants, via \"Configure Keypress Mode...\".\n"),
             ("Click / Double-click", " – Set what the button does on a click or double-click: Left-click, Right-click, Mute/Unmute, Play/Pause, or a Custom Keypress you record. Applies the same in every mode. Double-click defaults to None (no detection delay added to clicks) until you configure one. For Mute/Unmute or Play/Pause, hold Shift to use the other action."),
-            ("Long press", " – Right-click, left-click, double-click, toggle between two modes (Audio/Scroll, Audio/Keypress, or Scroll/Keypress), toggle fine/coarse scrolling, run a script, or a Custom Keypress. Configurable per app in \"Configure Applications...\".\n"),
+            ("Long press", " – Right-click, left-click, double-click, toggle between two modes (Audio/Scroll, Audio/Keypress, or Scroll/Keypress), toggle fine/coarse scrolling, run a script, or a Custom Keypress. Configurable per app in \"Configure Applications...\"."),
             ("Hold key", " – Holds a single key down for exactly as long as the PowerMate button is held, for push-to-talk dictation and anything else that reacts to a key being held. A bare modifier such as Fn can be recorded. While a hold key is set, click, double-click and long press do nothing.\n"),
             ("Modifiers:", ""),
             ("Fn + turn", " – Momentarily toggle between scroll and audio mode."),

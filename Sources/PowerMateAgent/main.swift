@@ -69,7 +69,7 @@ private func beginHoldKey() {
 
 /// Releases the key beginHoldKey pressed. Safe to call when no hold is in flight, which is what
 /// makes it usable as the disconnect cleanup — a yanked cable must not leave Fn stuck down.
-private func endHoldKey() {
+func endHoldKey() {
     guard let binding = _heldKeyBinding else { return }
     _heldKeyBinding = nil
     postKeyUp(binding.keyCode, flags: binding.flags)
@@ -213,8 +213,8 @@ driver.onDoubleClick = {
 // single clicks stay instantaneous for anyone not using this feature), and while a menu is
 // focused (so PowerMate's Return-key confirmation isn't delayed by the detection window).
 driver.shouldWaitForDoubleClick = {
-    // A hold key suppresses both click and double-click, so there is nothing to detect and no
-    // reason to make the button-down-to-key-down latency wait for the detection window.
+    // A hold key suppresses both click and double-click, so there is nothing to detect: skip
+    // the wait rather than schedule a click work item the guard would drop anyway.
     currentSettings().holdKey == nil && !useMenuBehavior() && currentSettings().doubleClickAction != .none
 }
 
