@@ -23,6 +23,12 @@ import ApplicationServices
 import CoreAudio
 import PowerMateDriver
 
+// MARK: - Self-test verbs
+
+// Handled before anything else so `--selftest-hold` / `--selftest-decode` never seize the HID
+// device or build a status item; returns immediately for a normal launch.
+runSelfTestIfRequested()
+
 // MARK: - Driver
 
 let driver = PowerMateDriver()
@@ -35,6 +41,39 @@ var lastRotationTime: CFTimeInterval = 0
 // Tracks whether rotation occurred while the button was held, so the subsequent
 // button-up click can be suppressed (avoiding an unintended mute/click after track skip).
 private var _didRotateWhileButtonDown = false
+
+// MARK: - Hold key
+
+// The binding onButtonDown actually pressed, so onButtonUp releases exactly that key. Resolving
+// currentSettings() again on release would read the frontmost app's settings, and the frontmost
+// app routinely changes during a hold (a dictation target takes focus) — that path leaves the
+// originally pressed key down forever.
+private var _heldKeyBinding: KeyBinding?
+
+// Whether the press being resolved right now is a hold-key press. The driver reports click,
+// double-click and long press only AFTER release, so without this they would all fire on top of
+// the hold. Rewritten on every button-down (false when no hold key is configured), which also
+// keeps it correct for a double-click, resolved after the second press.
+private var _holdKeySuppressesGestures = false
+
+/// Presses the configured hold key, if any, and remembers it for the matching release.
+private func beginHoldKey() {
+    guard let binding = currentSettings().holdKey else {
+        _holdKeySuppressesGestures = false
+        return
+    }
+    _holdKeySuppressesGestures = true
+    _heldKeyBinding = binding
+    postKeyDown(binding.keyCode, flags: binding.flags)
+}
+
+/// Releases the key beginHoldKey pressed. Safe to call when no hold is in flight, which is what
+/// makes it usable as the disconnect cleanup — a yanked cable must not leave Fn stuck down.
+private func endHoldKey() {
+    guard let binding = _heldKeyBinding else { return }
+    _heldKeyBinding = nil
+    postKeyUp(binding.keyCode, flags: binding.flags)
+}
 
 // Keypress Mode modifier-slot debounce: realModifierFlags occasionally still misreads a held
 // modifier as released for a single tick (a residual timing race — see its doc comment), most
@@ -150,7 +189,7 @@ driver.onClick = {
     // first (the driver handles button-change before rotation within each report block).
     // This ensures _didRotateWhileButtonDown is set before we decide whether to act.
     DispatchQueue.main.async {
-        guard !_didRotateWhileButtonDown else { return }
+        guard !_didRotateWhileButtonDown, !_holdKeySuppressesGestures else { return }
         if useMenuBehavior() {
             postKey(kReturnKey)
             // Do not exit menu mode here: a submenu may open and we need to keep sending arrow keys.
@@ -164,7 +203,7 @@ driver.onClick = {
 
 driver.onDoubleClick = {
     DispatchQueue.main.async {
-        guard !_didRotateWhileButtonDown else { return }
+        guard !_didRotateWhileButtonDown, !_holdKeySuppressesGestures else { return }
         exitMenuMode()
         performClickAction(currentSettings().doubleClickAction)
     }
@@ -174,12 +213,14 @@ driver.onDoubleClick = {
 // single clicks stay instantaneous for anyone not using this feature), and while a menu is
 // focused (so PowerMate's Return-key confirmation isn't delayed by the detection window).
 driver.shouldWaitForDoubleClick = {
-    !useMenuBehavior() && currentSettings().doubleClickAction != .none
+    // A hold key suppresses both click and double-click, so there is nothing to detect and no
+    // reason to make the button-down-to-key-down latency wait for the detection window.
+    currentSettings().holdKey == nil && !useMenuBehavior() && currentSettings().doubleClickAction != .none
 }
 
 driver.onLongPress = {
     DispatchQueue.main.async {
-        guard !_didRotateWhileButtonDown else { return }
+        guard !_didRotateWhileButtonDown, !_holdKeySuppressesGestures else { return }
         // The action itself is resolved per-app (frontmost app's override, or the default).
         let settings = currentSettings()
         switch settings.longPressAction {
@@ -238,11 +279,13 @@ driver.onButtonDown = {
     isButtonDown = true
     _didRotateWhileButtonDown = false
     _trackSkipAccumulator = 0
+    beginHoldKey()
     setLEDOffMain(255)
 }
 
 driver.onButtonUp = {
     isButtonDown = false
+    endHoldKey()
     if throbTimer != nil {
         lastRotationTime = CFAbsoluteTimeGetCurrent()
     } else {
@@ -251,7 +294,13 @@ driver.onButtonUp = {
 }
 
 driver.onConnect    = { updateStatusIcon(); updateDockIcon(); setLEDOffMain(80) }
-driver.onDisconnect = { updateStatusIcon(); updateDockIcon() }
+driver.onDisconnect = {
+    // No button-up is coming for a press interrupted by unplug or sleep — release by hand.
+    endHoldKey()
+    _holdKeySuppressesGestures = false
+    updateStatusIcon()
+    updateDockIcon()
+}
 
 driver.start()
 
