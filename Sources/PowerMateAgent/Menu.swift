@@ -32,6 +32,8 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     var longPressFineScrollItem: NSMenuItem!
     var longPressRunScriptItem: NSMenuItem!
     var longPressCustomItem: NSMenuItem!
+    var holdKeyNoneItem: NSMenuItem!
+    var holdKeyCaptureItem: NSMenuItem!
 
     func updateMenuState() {
         reverseScrollItem.state       = defaultSettings.scrollReversed ? .on : .off
@@ -65,6 +67,10 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         longPressRunScriptItem.state            = (defaultSettings.longPressAction == .runScript) ? .on : .off
         longPressCustomItem.state               = (defaultSettings.longPressAction.customBinding != nil) ? .on : .off
         longPressCustomItem.title               = customKeypressTitle(defaultSettings.longPressAction.customBinding)
+
+        holdKeyNoneItem.state    = (defaultSettings.holdKey == nil) ? .on : .off
+        holdKeyCaptureItem.state = (defaultSettings.holdKey != nil) ? .on : .off
+        holdKeyCaptureItem.title = holdKeyTitle(defaultSettings.holdKey)
         updateStatusIcon()
         updateDockIcon()
     }
@@ -207,6 +213,20 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         }
     }
 
+    private func setHoldKey(_ binding: KeyBinding?) {
+        defaultSettings.holdKey = binding
+        saveDefaultSettings()
+        updateMenuState()
+    }
+
+    @objc func setHoldKeyNone() { setHoldKey(nil) }
+
+    @objc func setHoldKeyCapture() {
+        if let binding = showCaptureHoldKey(current: defaultSettings.holdKey) {
+            setHoldKey(binding)
+        }
+    }
+
     @objc func configureScripts() {
         showConfigureScripts()
     }
@@ -230,6 +250,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
             ("Keypress mode", " – Turning sends a configured keystroke instead of scrolling (disables Audio mode). Configure the keys, including Shift/Option/Command/Press variants, via \"Configure Keypress Mode...\".\n"),
             ("Click / Double-click", " – Set what the button does on a click or double-click: Left-click, Right-click, Mute/Unmute, Play/Pause, or a Custom Keypress you record. Applies the same in every mode. Double-click defaults to None (no detection delay added to clicks) until you configure one. For Mute/Unmute or Play/Pause, hold Shift to use the other action."),
             ("Long press", " – Right-click, left-click, double-click, toggle between two modes (Audio/Scroll, Audio/Keypress, or Scroll/Keypress), toggle fine/coarse scrolling, run a script, or a Custom Keypress. Configurable per app in \"Configure Applications...\".\n"),
+            ("Hold key", " – Holds a single key down for exactly as long as the PowerMate button is held, for push-to-talk dictation and anything else that reacts to a key being held. A bare modifier such as Fn can be recorded. While a hold key is set, click, double-click and long press do nothing.\n"),
             ("Modifiers:", ""),
             ("Fn + turn", " – Momentarily toggle between scroll and audio mode."),
             ("Shift + turn (audio mode)", " – Fine volume step (like Shift+Option+Volume keys)."),
@@ -490,6 +511,19 @@ func buildMenu() {
     let longPressSub = NSMenuItem(title: "Long press", action: nil, keyEquivalent: "")
     longPressSub.submenu = longPressMenu
     menu.addItem(longPressSub)
+
+    let holdKeyMenu = NSMenu()
+    let holdKeyNoneItem = NSMenuItem(title: "None", action: #selector(MenuHandler.setHoldKeyNone), keyEquivalent: "")
+    holdKeyNoneItem.target = menuHandler
+    menuHandler.holdKeyNoneItem = holdKeyNoneItem
+    holdKeyMenu.addItem(holdKeyNoneItem)
+    let holdKeyCaptureItem = NSMenuItem(title: "Hold Key While Pressed...", action: #selector(MenuHandler.setHoldKeyCapture), keyEquivalent: "")
+    holdKeyCaptureItem.target = menuHandler
+    menuHandler.holdKeyCaptureItem = holdKeyCaptureItem
+    holdKeyMenu.addItem(holdKeyCaptureItem)
+    let holdKeySub = NSMenuItem(title: "Hold key", action: nil, keyEquivalent: "")
+    holdKeySub.submenu = holdKeyMenu
+    menu.addItem(holdKeySub)
 
     menu.addItem(NSMenuItem.separator())
 
