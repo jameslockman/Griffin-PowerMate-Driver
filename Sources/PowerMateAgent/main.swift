@@ -60,6 +60,10 @@ private var _holdKeySuppressesGestures = false
 // button-up that arrives first, which is what turns that press into an ordinary click.
 private var _holdKeyArmWorkItem: DispatchWorkItem?
 
+// Whether the "Press + Turn" key has already been sent during the current press, for the
+// once-per-press (flick) behaviour. Reset on every button-down.
+private var _pressTurnFiredThisPress = false
+
 /// How long the button must stay down before the hold key is pressed, when a click or
 /// double-click action is configured alongside it. Anything released sooner is a tap and
 /// resolves through the driver's normal click path; anything held longer is a hold. Well under
@@ -153,6 +157,14 @@ driver.onRotate = { delta, rate in
         // is given up in its favour.
         if settings.mode == .keypress || settings.holdKey != nil {
             cancelHoldKeyForRotation()
+            if settings.pressTurnOncePerPress {
+                // A flick: the first detent decides the direction and fires once; anything
+                // further during the same press is ignored so a toggle is not undone.
+                guard !_pressTurnFiredThisPress else { return }
+                _pressTurnFiredThisPress = true
+                postTurnKeypress(delta: delta > 0 ? 1 : -1, slot: .press, settings: settings)
+                return
+            }
             postTurnKeypress(delta: delta, slot: .press, settings: settings)
             return
         }
@@ -319,6 +331,7 @@ driver.onLongPress = {
 driver.onButtonDown = {
     isButtonDown = true
     _didRotateWhileButtonDown = false
+    _pressTurnFiredThisPress = false
     _trackSkipAccumulator = 0
     beginHoldKey()
     setLEDOffMain(255)

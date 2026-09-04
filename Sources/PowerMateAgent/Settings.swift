@@ -186,13 +186,17 @@ struct AppSettings: Codable {
     /// past a short arming delay, after which the release gestures are suppressed. Long press
     /// is therefore never reachable while a hold key is set (see main.swift).
     var holdKey: KeyBinding?
+    /// When true, a press+turn sends its "Press + Turn" key once for the whole press instead of
+    /// once per detent, turning the gesture into a flick: hold, one nudge left or right, release.
+    /// Meant for toggling things (a quick-note window, a palette) where repeating would undo it.
+    var pressTurnOncePerPress = false
 }
 
 extension AppSettings {
     private enum CodingKeys: String, CodingKey {
         case mode, scrollReversed, fineScrollEnabled, scrollAxesSwapped, audioStepSwapped
         case clickAction, doubleClickAction, longPressAction, keypressBindings, script1, script2
-        case holdKey
+        case holdKey, pressTurnOncePerPress
     }
 
     /// Decodes leniently: a key missing from the stored JSON (because it was saved by an older
@@ -231,5 +235,6 @@ extension AppSettings {
         script1 = try container.decodeIfPresent(String.self, forKey: .script1)
         script2 = try container.decodeIfPresent(String.self, forKey: .script2)
         holdKey = try container.decodeIfPresent(KeyBinding.self, forKey: .holdKey)
+        pressTurnOncePerPress = try container.decodeIfPresent(Bool.self, forKey: .pressTurnOncePerPress) ?? fallback.pressTurnOncePerPress
     }
 }
