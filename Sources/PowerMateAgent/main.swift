@@ -50,26 +50,54 @@ private var _didRotateWhileButtonDown = false
 // originally pressed key down forever.
 private var _heldKeyBinding: KeyBinding?
 
-// Whether the press being resolved right now is a hold-key press. The driver reports click,
+// Whether the press being resolved right now became a hold-key press. The driver reports click,
 // double-click and long press only AFTER release, so without this they would all fire on top of
-// the hold. Rewritten on every button-down (false when no hold key is configured), which also
+// the hold. Rewritten on every button-down (false until the hold key actually arms), which also
 // keeps it correct for a double-click, resolved after the second press.
 private var _holdKeySuppressesGestures = false
 
-/// Presses the configured hold key, if any, and remembers it for the matching release.
+// The scheduled press of the hold key. Non-nil only during the arming delay; cancelled by a
+// button-up that arrives first, which is what turns that press into an ordinary click.
+private var _holdKeyArmWorkItem: DispatchWorkItem?
+
+/// How long the button must stay down before the hold key is pressed, when a click or
+/// double-click action is configured alongside it. Anything released sooner is a tap and
+/// resolves through the driver's normal click path; anything held longer is a hold. Well under
+/// the driver's 0.4 s long-press threshold, so a long press is always a hold and never both.
+/// With click and double-click both set to None there is nothing to tell apart, and the key
+/// is pressed immediately — no delay on push-to-talk for anyone who doesn't need it.
+private let kHoldKeyArmDelay: TimeInterval = 0.2
+
+/// Schedules (or, when no tap could be pending, immediately performs) the press of the
+/// configured hold key. Does nothing when no hold key is set.
 private func beginHoldKey() {
-    guard let binding = currentSettings().holdKey else {
-        _holdKeySuppressesGestures = false
+    let settings = currentSettings()
+    _holdKeySuppressesGestures = false
+    guard let binding = settings.holdKey else { return }
+    guard settings.clickAction != .none || settings.doubleClickAction != .none else {
+        armHoldKey(binding)
         return
     }
+    let work = DispatchWorkItem { armHoldKey(binding) }
+    _holdKeyArmWorkItem = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + kHoldKeyArmDelay, execute: work)
+}
+
+/// Presses the hold key and remembers it for the matching release. From here on the press in
+/// progress is a hold, so the gestures the driver reports on release are suppressed.
+private func armHoldKey(_ binding: KeyBinding) {
+    _holdKeyArmWorkItem = nil
     _holdKeySuppressesGestures = true
     _heldKeyBinding = binding
     postKeyDown(binding.keyCode, flags: binding.flags)
 }
 
-/// Releases the key beginHoldKey pressed. Safe to call when no hold is in flight, which is what
-/// makes it usable as the disconnect cleanup — a yanked cable must not leave Fn stuck down.
+/// Releases the key armHoldKey pressed, or cancels the press if it was still pending. Safe to
+/// call when no hold is in flight, which is what makes it usable as the disconnect cleanup — a
+/// yanked cable must not leave Fn stuck down.
 func endHoldKey() {
+    _holdKeyArmWorkItem?.cancel()
+    _holdKeyArmWorkItem = nil
     guard let binding = _heldKeyBinding else { return }
     _heldKeyBinding = nil
     postKeyUp(binding.keyCode, flags: binding.flags)
@@ -213,9 +241,7 @@ driver.onDoubleClick = {
 // single clicks stay instantaneous for anyone not using this feature), and while a menu is
 // focused (so PowerMate's Return-key confirmation isn't delayed by the detection window).
 driver.shouldWaitForDoubleClick = {
-    // A hold key suppresses both click and double-click, so there is nothing to detect: skip
-    // the wait rather than schedule a click work item the guard would drop anyway.
-    currentSettings().holdKey == nil && !useMenuBehavior() && currentSettings().doubleClickAction != .none
+    !useMenuBehavior() && currentSettings().doubleClickAction != .none
 }
 
 driver.onLongPress = {
