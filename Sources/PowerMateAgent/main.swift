@@ -92,6 +92,16 @@ private func armHoldKey(_ binding: KeyBinding) {
     postKeyDown(binding.keyCode, flags: binding.flags)
 }
 
+/// Turns the press in progress from a (pending or armed) hold into a press+turn gesture: the
+/// scheduled press is cancelled, or the already-held key released, and the release gestures stay
+/// suppressed because _didRotateWhileButtonDown is set by the caller. Called on every rotation
+/// tick while the button is down, so it must be cheap when there is nothing to undo.
+private func cancelHoldKeyForRotation() {
+    guard _holdKeyArmWorkItem != nil || _heldKeyBinding != nil else { return }
+    endHoldKey()
+    _holdKeySuppressesGestures = false
+}
+
 /// Releases the key armHoldKey pressed, or cancels the press if it was still pending. Safe to
 /// call when no hold is in flight, which is what makes it usable as the disconnect cleanup — a
 /// yanked cable must not leave Fn stuck down.
@@ -136,8 +146,13 @@ driver.onRotate = { delta, rate in
     if isButtonDown {
         _didRotateWhileButtonDown = true
         // In Keypress mode, holding the button while turning sends the configured
-        // "Press + Turn" key instead of the default track-skip behavior.
-        if settings.mode == .keypress {
+        // "Press + Turn" key instead of the default track-skip behavior. The same applies in
+        // every mode once a hold key is set: press+turn is then a navigation gesture (e.g. arrow
+        // keys through just-dictated text), not a dictation, so it cancels the hold instead of
+        // starting one, and the track-skip gesture (which the hold would have swallowed anyway)
+        // is given up in its favour.
+        if settings.mode == .keypress || settings.holdKey != nil {
+            cancelHoldKeyForRotation()
             postTurnKeypress(delta: delta, slot: .press, settings: settings)
             return
         }
