@@ -179,10 +179,12 @@ struct AppSettings: Codable {
     /// the global default script from Configure Scripts...", not "run an empty script".
     var script1: String?
     var script2: String?
-    /// Key held down for exactly as long as the PowerMate button is held, for push-to-talk
-    /// style targets (e.g. dictation bound to a bare Fn). nil — the default — means the
-    /// button keeps its normal click/double-click/long-press behavior; when set, those
-    /// gestures are suppressed for the duration of the press (see main.swift).
+    /// Key held down for as long as the PowerMate button is held, for push-to-talk style
+    /// targets (e.g. dictation bound to a bare Fn). nil — the default — means the button keeps
+    /// its normal click/double-click/long-press behavior. When set, a short tap still resolves
+    /// as a click (or double-click); the key is pressed only once the button has stayed down
+    /// past a short arming delay, after which the release gestures are suppressed. Long press
+    /// is therefore never reachable while a hold key is set (see main.swift).
     var holdKey: KeyBinding?
 }
 
