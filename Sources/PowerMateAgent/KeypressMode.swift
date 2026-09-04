@@ -357,7 +357,7 @@ func holdKeyTitle(_ binding: KeyBinding?) -> String {
 func showCaptureHoldKey(current: KeyBinding?) -> KeyBinding? {
     let alert = NSAlert()
     alert.messageText = "Hold Key While Pressed"
-    alert.informativeText = "Click the button below, then press the key to hold for as long as the PowerMate button is held. A modifier on its own works here — press just Fn for push-to-talk dictation.\n\nWhile a hold key is set, click, double-click and long press do nothing."
+    alert.informativeText = "Click the button below, then press the key to hold for as long as the PowerMate button is held. A modifier on its own works here — press just Fn for push-to-talk dictation.\n\nA short tap still performs the Click action; the hold key engages once the button has been held for 0.2 s. Long press does nothing while a hold key is set."
     alert.addButton(withTitle: "Save")
     alert.addButton(withTitle: "Cancel")
 
