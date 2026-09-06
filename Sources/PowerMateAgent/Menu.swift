@@ -32,6 +32,9 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     var longPressFineScrollItem: NSMenuItem!
     var longPressRunScriptItem: NSMenuItem!
     var longPressCustomItem: NSMenuItem!
+    var holdKeyNoneItem: NSMenuItem!
+    var holdKeyCaptureItem: NSMenuItem!
+    var pressTurnOnceItem: NSMenuItem!
 
     func updateMenuState() {
         reverseScrollItem.state       = defaultSettings.scrollReversed ? .on : .off
@@ -65,6 +68,11 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         longPressRunScriptItem.state            = (defaultSettings.longPressAction == .runScript) ? .on : .off
         longPressCustomItem.state               = (defaultSettings.longPressAction.customBinding != nil) ? .on : .off
         longPressCustomItem.title               = customKeypressTitle(defaultSettings.longPressAction.customBinding)
+
+        holdKeyNoneItem.state    = (defaultSettings.holdKey == nil) ? .on : .off
+        holdKeyCaptureItem.state = (defaultSettings.holdKey != nil) ? .on : .off
+        holdKeyCaptureItem.title = holdKeyTitle(defaultSettings.holdKey)
+        pressTurnOnceItem.state  = defaultSettings.pressTurnOncePerPress ? .on : .off
         updateStatusIcon()
         updateDockIcon()
     }
@@ -207,6 +215,26 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         }
     }
 
+    private func setHoldKey(_ binding: KeyBinding?) {
+        defaultSettings.holdKey = binding
+        saveDefaultSettings()
+        updateMenuState()
+    }
+
+    @objc func setHoldKeyNone() { setHoldKey(nil) }
+
+    @objc func togglePressTurnOncePerPress() {
+        defaultSettings.pressTurnOncePerPress.toggle()
+        saveDefaultSettings()
+        updateMenuState()
+    }
+
+    @objc func setHoldKeyCapture() {
+        if let binding = showCaptureHoldKey(current: defaultSettings.holdKey) {
+            setHoldKey(binding)
+        }
+    }
+
     @objc func configureScripts() {
         showConfigureScripts()
     }
@@ -229,7 +257,8 @@ final class MenuHandler: NSObject, NSMenuDelegate {
             ("Prefer Fine scrolling", " – Scroll by single-pixel increments instead of the default coarse step for precise control."),
             ("Keypress mode", " – Turning sends a configured keystroke instead of scrolling (disables Audio mode). Configure the keys, including Shift/Option/Command/Press variants, via \"Configure Keypress Mode...\".\n"),
             ("Click / Double-click", " – Set what the button does on a click or double-click: Left-click, Right-click, Mute/Unmute, Play/Pause, or a Custom Keypress you record. Applies the same in every mode. Double-click defaults to None (no detection delay added to clicks) until you configure one. For Mute/Unmute or Play/Pause, hold Shift to use the other action."),
-            ("Long press", " – Right-click, left-click, double-click, toggle between two modes (Audio/Scroll, Audio/Keypress, or Scroll/Keypress), toggle fine/coarse scrolling, run a script, or a Custom Keypress. Configurable per app in \"Configure Applications...\".\n"),
+            ("Long press", " – Right-click, left-click, double-click, toggle between two modes (Audio/Scroll, Audio/Keypress, or Scroll/Keypress), toggle fine/coarse scrolling, run a script, or a Custom Keypress. Configurable per app in \"Configure Applications...\"."),
+            ("Hold key", " – Holds a single key down for exactly as long as the PowerMate button is held, for push-to-talk dictation and anything else that reacts to a key being held. A bare modifier such as Fn can be recorded. A short tap still performs the Click action (and a double-click its action, if one is set); the key engages once the button has been held for 0.2 s. With Click and Double-click both None it engages immediately. Long press does nothing while a hold key is set. Press + Turn sends the Keypress-mode \"Press + Turn\" key in every mode (instead of skipping tracks) and cancels the hold, so you can step through just-dictated text. \"Press + Turn Fires Once Per Press\" turns it into a flick: hold, nudge left or right, release, one keypress, e.g. to toggle a quick-note window.\n"),
             ("Modifiers:", ""),
             ("Fn + turn", " – Momentarily toggle between scroll and audio mode."),
             ("Shift + turn (audio mode)", " – Fine volume step (like Shift+Option+Volume keys)."),
@@ -490,6 +519,24 @@ func buildMenu() {
     let longPressSub = NSMenuItem(title: "Long press", action: nil, keyEquivalent: "")
     longPressSub.submenu = longPressMenu
     menu.addItem(longPressSub)
+
+    let holdKeyMenu = NSMenu()
+    let holdKeyNoneItem = NSMenuItem(title: "None", action: #selector(MenuHandler.setHoldKeyNone), keyEquivalent: "")
+    holdKeyNoneItem.target = menuHandler
+    menuHandler.holdKeyNoneItem = holdKeyNoneItem
+    holdKeyMenu.addItem(holdKeyNoneItem)
+    let holdKeyCaptureItem = NSMenuItem(title: "Hold Key While Pressed...", action: #selector(MenuHandler.setHoldKeyCapture), keyEquivalent: "")
+    holdKeyCaptureItem.target = menuHandler
+    menuHandler.holdKeyCaptureItem = holdKeyCaptureItem
+    holdKeyMenu.addItem(holdKeyCaptureItem)
+    holdKeyMenu.addItem(NSMenuItem.separator())
+    let pressTurnOnceItem = NSMenuItem(title: "Press + Turn Fires Once Per Press", action: #selector(MenuHandler.togglePressTurnOncePerPress), keyEquivalent: "")
+    pressTurnOnceItem.target = menuHandler
+    menuHandler.pressTurnOnceItem = pressTurnOnceItem
+    holdKeyMenu.addItem(pressTurnOnceItem)
+    let holdKeySub = NSMenuItem(title: "Hold key", action: nil, keyEquivalent: "")
+    holdKeySub.submenu = holdKeyMenu
+    menu.addItem(holdKeySub)
 
     menu.addItem(NSMenuItem.separator())
 

@@ -23,6 +23,12 @@ import ApplicationServices
 import CoreAudio
 import PowerMateDriver
 
+// MARK: - Self-test verbs
+
+// Handled before anything else so `--selftest-hold` / `--selftest-decode` never seize the HID
+// device or build a status item; returns immediately for a normal launch.
+runSelfTestIfRequested()
+
 // MARK: - Driver
 
 let driver = PowerMateDriver()
@@ -35,6 +41,81 @@ var lastRotationTime: CFTimeInterval = 0
 // Tracks whether rotation occurred while the button was held, so the subsequent
 // button-up click can be suppressed (avoiding an unintended mute/click after track skip).
 private var _didRotateWhileButtonDown = false
+
+// MARK: - Hold key
+
+// The binding onButtonDown actually pressed, so onButtonUp releases exactly that key. Resolving
+// currentSettings() again on release would read the frontmost app's settings, and the frontmost
+// app routinely changes during a hold (a dictation target takes focus) — that path leaves the
+// originally pressed key down forever.
+private var _heldKeyBinding: KeyBinding?
+
+// Whether the press being resolved right now became a hold-key press. The driver reports click,
+// double-click and long press only AFTER release, so without this they would all fire on top of
+// the hold. Rewritten on every button-down (false until the hold key actually arms), which also
+// keeps it correct for a double-click, resolved after the second press.
+private var _holdKeySuppressesGestures = false
+
+// The scheduled press of the hold key. Non-nil only during the arming delay; cancelled by a
+// button-up that arrives first, which is what turns that press into an ordinary click.
+private var _holdKeyArmWorkItem: DispatchWorkItem?
+
+// Whether the "Press + Turn" key has already been sent during the current press, for the
+// once-per-press (flick) behaviour. Reset on every button-down.
+private var _pressTurnFiredThisPress = false
+
+/// How long the button must stay down before the hold key is pressed, when a click or
+/// double-click action is configured alongside it. Anything released sooner is a tap and
+/// resolves through the driver's normal click path; anything held longer is a hold. Well under
+/// the driver's 0.4 s long-press threshold, so a long press is always a hold and never both.
+/// With click and double-click both set to None there is nothing to tell apart, and the key
+/// is pressed immediately — no delay on push-to-talk for anyone who doesn't need it.
+private let kHoldKeyArmDelay: TimeInterval = 0.2
+
+/// Schedules (or, when no tap could be pending, immediately performs) the press of the
+/// configured hold key. Does nothing when no hold key is set.
+private func beginHoldKey() {
+    let settings = currentSettings()
+    _holdKeySuppressesGestures = false
+    guard let binding = settings.holdKey else { return }
+    guard settings.clickAction != .none || settings.doubleClickAction != .none else {
+        armHoldKey(binding)
+        return
+    }
+    let work = DispatchWorkItem { armHoldKey(binding) }
+    _holdKeyArmWorkItem = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + kHoldKeyArmDelay, execute: work)
+}
+
+/// Presses the hold key and remembers it for the matching release. From here on the press in
+/// progress is a hold, so the gestures the driver reports on release are suppressed.
+private func armHoldKey(_ binding: KeyBinding) {
+    _holdKeyArmWorkItem = nil
+    _holdKeySuppressesGestures = true
+    _heldKeyBinding = binding
+    postKeyDown(binding.keyCode, flags: binding.flags)
+}
+
+/// Turns the press in progress from a (pending or armed) hold into a press+turn gesture: the
+/// scheduled press is cancelled, or the already-held key released, and the release gestures stay
+/// suppressed because _didRotateWhileButtonDown is set by the caller. Called on every rotation
+/// tick while the button is down, so it must be cheap when there is nothing to undo.
+private func cancelHoldKeyForRotation() {
+    guard _holdKeyArmWorkItem != nil || _heldKeyBinding != nil else { return }
+    endHoldKey()
+    _holdKeySuppressesGestures = false
+}
+
+/// Releases the key armHoldKey pressed, or cancels the press if it was still pending. Safe to
+/// call when no hold is in flight, which is what makes it usable as the disconnect cleanup — a
+/// yanked cable must not leave Fn stuck down.
+func endHoldKey() {
+    _holdKeyArmWorkItem?.cancel()
+    _holdKeyArmWorkItem = nil
+    guard let binding = _heldKeyBinding else { return }
+    _heldKeyBinding = nil
+    postKeyUp(binding.keyCode, flags: binding.flags)
+}
 
 // Keypress Mode modifier-slot debounce: realModifierFlags occasionally still misreads a held
 // modifier as released for a single tick (a residual timing race — see its doc comment), most
@@ -69,8 +150,21 @@ driver.onRotate = { delta, rate in
     if isButtonDown {
         _didRotateWhileButtonDown = true
         // In Keypress mode, holding the button while turning sends the configured
-        // "Press + Turn" key instead of the default track-skip behavior.
-        if settings.mode == .keypress {
+        // "Press + Turn" key instead of the default track-skip behavior. The same applies in
+        // every mode once a hold key is set: press+turn is then a navigation gesture (e.g. arrow
+        // keys through just-dictated text), not a dictation, so it cancels the hold instead of
+        // starting one, and the track-skip gesture (which the hold would have swallowed anyway)
+        // is given up in its favour.
+        if settings.mode == .keypress || settings.holdKey != nil {
+            cancelHoldKeyForRotation()
+            if settings.pressTurnOncePerPress {
+                // A flick: the first detent decides the direction and fires once; anything
+                // further during the same press is ignored so a toggle is not undone.
+                guard !_pressTurnFiredThisPress else { return }
+                _pressTurnFiredThisPress = true
+                postTurnKeypress(delta: delta > 0 ? 1 : -1, slot: .press, settings: settings)
+                return
+            }
             postTurnKeypress(delta: delta, slot: .press, settings: settings)
             return
         }
@@ -150,7 +244,7 @@ driver.onClick = {
     // first (the driver handles button-change before rotation within each report block).
     // This ensures _didRotateWhileButtonDown is set before we decide whether to act.
     DispatchQueue.main.async {
-        guard !_didRotateWhileButtonDown else { return }
+        guard !_didRotateWhileButtonDown, !_holdKeySuppressesGestures else { return }
         if useMenuBehavior() {
             postKey(kReturnKey)
             // Do not exit menu mode here: a submenu may open and we need to keep sending arrow keys.
@@ -164,7 +258,7 @@ driver.onClick = {
 
 driver.onDoubleClick = {
     DispatchQueue.main.async {
-        guard !_didRotateWhileButtonDown else { return }
+        guard !_didRotateWhileButtonDown, !_holdKeySuppressesGestures else { return }
         exitMenuMode()
         performClickAction(currentSettings().doubleClickAction)
     }
@@ -179,7 +273,7 @@ driver.shouldWaitForDoubleClick = {
 
 driver.onLongPress = {
     DispatchQueue.main.async {
-        guard !_didRotateWhileButtonDown else { return }
+        guard !_didRotateWhileButtonDown, !_holdKeySuppressesGestures else { return }
         // The action itself is resolved per-app (frontmost app's override, or the default).
         let settings = currentSettings()
         switch settings.longPressAction {
@@ -237,12 +331,15 @@ driver.onLongPress = {
 driver.onButtonDown = {
     isButtonDown = true
     _didRotateWhileButtonDown = false
+    _pressTurnFiredThisPress = false
     _trackSkipAccumulator = 0
+    beginHoldKey()
     setLEDOffMain(255)
 }
 
 driver.onButtonUp = {
     isButtonDown = false
+    endHoldKey()
     if throbTimer != nil {
         lastRotationTime = CFAbsoluteTimeGetCurrent()
     } else {
@@ -251,7 +348,13 @@ driver.onButtonUp = {
 }
 
 driver.onConnect    = { updateStatusIcon(); updateDockIcon(); setLEDOffMain(80) }
-driver.onDisconnect = { updateStatusIcon(); updateDockIcon() }
+driver.onDisconnect = {
+    // No button-up is coming for a press interrupted by unplug or sleep — release by hand.
+    endHoldKey()
+    _holdKeySuppressesGestures = false
+    updateStatusIcon()
+    updateDockIcon()
+}
 
 driver.start()
 

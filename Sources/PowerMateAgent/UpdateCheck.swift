@@ -9,8 +9,14 @@ let kCurrentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] 
 
 /// Returns true if `version` is strictly newer than `current` (semantic comparison).
 private func isNewerVersion(_ version: String, than current: String) -> Bool {
-    let a = version.split(separator: ".").compactMap { Int($0) }
-    let b = current.split(separator: ".").compactMap { Int($0) }
+    // Compare the numeric core only. A pre-release suffix such as "1.0.19-holdkey.1" would
+    // otherwise split into [1, 0, 1] and make the release it was built from look newer.
+    func core(_ s: String) -> [Int] {
+        s.split(separator: "-", maxSplits: 1).first.map(String.init)?
+            .split(separator: ".").compactMap { Int($0) } ?? []
+    }
+    let a = core(version)
+    let b = core(current)
     for i in 0..<max(a.count, b.count) {
         let av = i < a.count ? a[i] : 0
         let bv = i < b.count ? b[i] : 0
