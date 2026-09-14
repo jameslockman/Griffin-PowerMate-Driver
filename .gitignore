@@ -6,3 +6,5 @@ secrets.json
 
 # Cursor config
 .cursor/
+/.claude
+/.scout
