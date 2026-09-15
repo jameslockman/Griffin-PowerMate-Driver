@@ -5,6 +5,15 @@
 #
 # Requires Swift/Xcode that can build both slices (typically Apple Silicon Mac, or
 # Intel Mac with a toolchain that supports arm64-apple-macosx cross-compilation).
+#
+# --build-system native is required below: newer toolchains default to the "swiftbuild"
+# backend, which writes to .build/out/Products/<Config>/ instead of the triple-qualified
+# .build/<triple>/release/ paths $ARM_BIN/$X86_BIN expect. Without it, this script has been
+# seen to silently repackage stale binaries left over from a previous native-backend build,
+# without any error, rather than picking up the code that was actually just compiled — since
+# the new backend never touches (or clears) the old triple-qualified directories. --build-system
+# native is itself deprecated upstream; if it's ever removed, this script needs to be rewritten
+# against the swiftbuild layout, not just have the flag dropped.
 
 set -e
 cd "$(dirname "$0")/.."
@@ -19,10 +28,10 @@ X86_BIN=".build/${TRIPLE_X86}/release/PowerMateAgent"
 UNIVERSAL_BIN=".build/universal/PowerMateAgent"
 
 echo "Building release for Apple Silicon (arm64)..."
-swift build -c release --triple "$TRIPLE_ARM" --product PowerMateAgent
+swift build -c release --triple "$TRIPLE_ARM" --product PowerMateAgent --build-system native
 
 echo "Building release for Intel (x86_64)..."
-swift build -c release --triple "$TRIPLE_X86" --product PowerMateAgent
+swift build -c release --triple "$TRIPLE_X86" --product PowerMateAgent --build-system native
 
 if [ ! -f "$ARM_BIN" ] || [ ! -f "$X86_BIN" ]; then
   echo "Missing fat slice binary — expected:" >&2

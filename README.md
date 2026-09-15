@@ -136,10 +136,11 @@ With the PowerMate plugged in, turn the knob or press the button; the demo print
 **PowerMateAgent** turns the knob and button into keyboard/scroll events that **any application** receives (browser, editor, etc.):
 
 - **Rotation** → vertical scroll (or horizontal when **Default to horizontal scroll** is enabled), or **Up/Down arrow keys** when a menu (or submenu) is focused, or **system volume** in Audio mode (standard step; hold **Shift** for fine step; hold **Fn** to temporarily flip modes), or a **configurable keystroke** in Keypress mode (separate bindings for plain turn, Shift, Option, Command, and Press+turn). Hold **Shift** to scroll the alternate axis in Scroll mode.
-- **Press and turn** → skip to the next or previous track in the current media player (Scroll/Audio mode), or send the configured "Press + Turn" key (Keypress mode).
+- **Press and turn** → skip to the next or previous track in the current media player (Scroll/Audio mode), or send the configured "Press + Turn" key (Keypress mode) — or, whenever a **Hold key** is set, send the Keypress-mode "Press + Turn" key in every mode instead and cancel the hold, so you can step through just-dictated text.
 - **Click** (short press) → configurable: **left-click** (default), **right-click**, **mute/unmute**, **play/pause** (Shift alternates between Mute and Play/Pause), or a **custom keypress** you record — the same regardless of rotation mode. Sends **Return** instead when a menu is focused (chooses the highlighted item).
 - **Double-click** → configurable the same way as Click, plus **None** (the default — adds no click-detection delay until you configure one).
 - **Long press** → **right-click** (default), **left-click**, **double-click**, **Toggle Mode** (switches between any two of Scroll/Audio/Keypress), **toggle fine/coarse scrolling**, **run a shell script**, or a **custom keypress**.
+- **Hold key** (in the Long press menu) → holds a configured key down for exactly as long as the PowerMate button is held (including a bare modifier such as **Fn**), for push-to-talk dictation and anything else that reacts to a key being held. A short tap still resolves as Click (or Double-click, if configured). The key engages after a roughly 0.2 s arming delay, or immediately when Click and Double-click are both None. Setting a hold key takes over Long press, since a long press is itself a hold. Configurable per app in **Configure Applications...**, same as the other Long press options. **Press + Turn Fires Once Per Press** sends the Press + Turn key once for the whole press instead of once per detent — a flick (hold, one nudge, release) useful for toggling something such as a quick-note window, which repeating would undo.
 
 **Menu detection** uses the Accessibility API: when the focused UI element is a menu or submenu, rotation sends arrow keys and click sends Return. A long-press also enters a fallback “menu mode” (arrow keys until click or 5-second timeout) if Accessibility is not enabled.
 
@@ -251,6 +252,12 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 - Apple IOKit HID: `IOHIDManager`, `IOHIDDeviceOpen`, `IOHIDDeviceRegisterInputReportCallback`
 
 ### Versions
+
+#### 1.0.20
+
+**Hold key**: a new push-to-talk action. Configure a key (including a bare modifier such as Fn) via **Long press** → **Hold Key While Pressed...**, and it's held down for exactly as long as the PowerMate button is held. A short tap still resolves as Click (or Double-click, if configured); the key engages after a roughly 0.2 s arming delay, or immediately when Click and Double-click are both None. Setting a hold key takes over Long press, since a long press is itself a hold, and Press + Turn sends the Keypress-mode "Press + Turn" key in every mode instead of skipping tracks, cancelling the hold so you can step through just-dictated text. Configurable per app in **Configure Applications...**, same as the other Long press options — choosing a different Long press action for an app clears its hold key.
+
+**Press + Turn Fires Once Per Press**: an option for the Press + Turn gesture (Keypress mode, or any mode once a hold key is set) that turns it into a flick — hold the button, one nudge left or right, release, one keypress — instead of repeating the key once per detent. Useful for toggling something such as a quick-note window, which repeating would undo. Configurable per app in **Configure Applications...**, alongside Long press.
 
 #### 1.0.19
 

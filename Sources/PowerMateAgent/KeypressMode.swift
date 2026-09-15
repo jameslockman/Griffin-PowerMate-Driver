@@ -158,14 +158,25 @@ private var _localModifierMonitor: Any?
 func startTrackingRealModifierFlags() {
     realModifierFlags = cgEventFlags(from: NSEvent.modifierFlags)
     _globalModifierMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { event in
+        guard !isSelfSynthesized(event) else { return }
         realModifierFlags = cgEventFlags(from: event.modifierFlags)
     }
     // Global monitors don't see events delivered to this app's own key window (e.g. while a
     // Configure... dialog is focused) — a local monitor covers that case too.
     _localModifierMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+        guard !isSelfSynthesized(event) else { return event }
         realModifierFlags = cgEventFlags(from: event.modifierFlags)
         return event
     }
+}
+
+/// True for a .flagsChanged event this app posted itself (a hold key, or the courtesy
+/// re-broadcast below), identified by the tag postKeyDown/postKeyUp stamp on. `realModifierFlags`
+/// must stay a picture of the *hardware* keyboard: a hold key bound to Fn or Shift would
+/// otherwise flip the Fn+turn mode override or select a different Keypress-mode column for the
+/// whole duration of the hold, purely because of an event this app generated.
+private func isSelfSynthesized(_ event: NSEvent) -> Bool {
+    event.cgEvent?.getIntegerValueField(.eventSourceUserData) == kSelfSynthesizedEventTag
 }
 
 /// Sends the configured key (from `settings`) for the given turn direction/slot, once per
@@ -189,6 +200,7 @@ private func refreshSessionModifierState() {
     // hardware-state read above.
     guard let event = CGEvent(keyboardEventSource: kHIDEventSource, virtualKey: 0x38 /* kVK_Shift */, keyDown: true) else { return }
     event.flags = realModifierFlags
+    tagAsSelfSynthesized(event)
     event.post(tap: .cghidEventTap)
 }
 
@@ -220,6 +232,52 @@ func keyLabel(for keyCode: CGKeyCode, event: NSEvent) -> String {
     return "Key \(keyCode)"
 }
 
+/// Modifier keys that can be recorded on their own, mapped to the NSEvent flag they assert
+/// while held plus a display label. Caps Lock is deliberately absent: it latches rather than
+/// following the physical key, so "held" has no meaning for it.
+private let modifierOnlyKeys: [CGKeyCode: (flag: NSEvent.ModifierFlags, label: String)] = [
+    0x37: (.command,  "Command"), 0x36: (.command,  "Right Command"),
+    0x38: (.shift,    "Shift"),   0x3C: (.shift,    "Right Shift"),
+    0x3A: (.option,   "Option"),  0x3D: (.option,   "Right Option"),
+    0x3B: (.control,  "Control"), 0x3E: (.control,  "Right Control"),
+    0x3F: (.function, "Fn"),
+]
+
+// MARK: - Bare-modifier chord disambiguation
+//
+// A modifier's press transition alone doesn't say whether the gesture is "hold this modifier
+// alone" or "hold this modifier, then press a real key" (e.g. Control-Option-F). Only later
+// disambiguates it: the modifier's own release with nothing else pressed in between means
+// "alone"; a real key arriving first means the modifier was just a prefix, and that key wins
+// instead.
+//
+// Deliberately kept free of NSEvent/AppKit so --selftest-capture can drive it with plain values
+// and assert the outcome without a running run loop or real keyboard — local monitors don't fire
+// for programmatically posted events without one, which made the equivalent logic untestable
+// before this was pulled out.
+struct ModifierCaptureState {
+    private(set) var pending: (keyCode: CGKeyCode, label: String)?
+
+    /// Call for every .flagsChanged transition of a code present in `modifierOnlyKeys`. Returns
+    /// the binding to finalize with on a release-with-nothing-else-pressed, else nil to keep
+    /// waiting (including every press transition, which only ever records the candidate).
+    mutating func handleModifierTransition(keyCode: CGKeyCode, label: String, isDown: Bool) -> KeyBinding? {
+        if isDown {
+            pending = (keyCode, label)
+            return nil
+        }
+        guard pending?.keyCode == keyCode else { return nil }
+        pending = nil
+        return KeyBinding(keyCode: keyCode, label: label)
+    }
+
+    /// Call when a real key arrives: whatever modifier was pending was a prefix, not a
+    /// bare-modifier gesture, so drop the candidate without producing a binding for it.
+    mutating func interruptWithRealKey() {
+        pending = nil
+    }
+}
+
 // MARK: - Key capture control
 
 /// A push button that, when clicked, records the next key pressed anywhere in the app and
@@ -231,7 +289,14 @@ final class KeyCaptureButton: NSButton {
     var binding: KeyBinding {
         didSet { updateTitle() }
     }
+
+    /// Whether a bare modifier (Fn, Right Option, ...) counts as a recordable key. Off for the
+    /// Keypress-mode grid and the Custom Keypress dialog, where a modifier on its own isn't a
+    /// keystroke anything would act on; on for the hold key, whose whole point is holding one.
+    var capturesModifiersAlone = false
+
     private var monitor: Any?
+    private var modifierState = ModifierCaptureState()
 
     init(binding: KeyBinding) {
         self.binding = binding
@@ -252,10 +317,39 @@ final class KeyCaptureButton: NSButton {
         KeyCaptureButton.activeCapture?.cancelCapture()
         KeyCaptureButton.activeCapture = self
         title = "Press a key…"
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
-            self?.finishCapture(with: event)
-            return nil // swallow so it doesn't also trigger e.g. Esc-cancels-the-alert
+        modifierState = ModifierCaptureState()
+        let mask: NSEvent.EventTypeMask = capturesModifiersAlone ? [.keyDown, .flagsChanged] : [.keyDown]
+        monitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
+            self?.processCaptureEvent(event) ?? event
         }
+    }
+
+    /// The actual capture decision for one event: which kind it is, and what to do about it.
+    /// Pulled out of the monitor closure so --selftest-capture-button can drive it directly with
+    /// synthetic NSEvents built via NSEvent.keyEvent(with:...) — local monitors themselves only
+    /// fire for genuinely-dispatched events, which makes the closure itself unreachable from a
+    /// headless self-test with no run loop pumping real input.
+    func processCaptureEvent(_ event: NSEvent) -> NSEvent? {
+        if event.type == .flagsChanged {
+            handleModifierTransition(event)
+            // Not swallowed: a modifier isn't a command the dialog would misread, and the
+            // release transition still has to reach anything else tracking modifier state.
+            return event
+        }
+        modifierState.interruptWithRealKey()
+        finishCapture(with: event)
+        return nil // swallow so it doesn't also trigger e.g. Esc-cancels-the-alert
+    }
+
+    /// Feeds a `.flagsChanged` event to the modifier-chord state machine, finalizing the
+    /// binding if it resolves one (a release with nothing pressed in between).
+    private func handleModifierTransition(_ event: NSEvent) {
+        let keyCode = CGKeyCode(event.keyCode)
+        guard let modifier = modifierOnlyKeys[keyCode] else { return }
+        let isDown = event.modifierFlags.contains(modifier.flag)
+        guard let finalized = modifierState.handleModifierTransition(keyCode: keyCode, label: modifier.label, isDown: isDown) else { return }
+        stopMonitoring()
+        binding = finalized
     }
 
     private func finishCapture(with event: NSEvent) {
@@ -292,6 +386,41 @@ final class KeyCaptureButton: NSButton {
 /// has been set, so the choice is visible without opening the capture dialog again.
 func customKeypressTitle(_ binding: KeyBinding?) -> String {
     binding.map { "Custom Keypress: \($0.label)" } ?? "Custom Keypress..."
+}
+
+/// The title for the "Hold Key While Pressed..." menu item, mirroring customKeypressTitle so
+/// the recorded key is visible without reopening the capture dialog.
+func holdKeyTitle(_ binding: KeyBinding?) -> String {
+    binding.map { "Hold Key While Pressed: \($0.label)" } ?? "Hold Key While Pressed..."
+}
+
+// MARK: - Hold-key capture dialog
+
+/// Like showCaptureCustomKeypress, but for the key held down for the duration of a button
+/// press. Records a bare modifier too — the intended target is dictation bound to a lone Fn.
+/// Returns the recorded binding, or nil if the dialog was cancelled.
+@discardableResult
+func showCaptureHoldKey(current: KeyBinding?) -> KeyBinding? {
+    let alert = NSAlert()
+    alert.messageText = "Hold Key While Pressed"
+    alert.informativeText = "Click the button below, then press the key to hold for as long as the PowerMate button is held. A modifier alone works too — press just Fn for push-to-talk dictation. A short tap still performs the Click action; Long press does nothing while a hold key is set."
+    alert.addButton(withTitle: "Save")
+    alert.addButton(withTitle: "Cancel")
+
+    let seed = current ?? KeyBinding(keyCode: 0x3F, label: "Fn")
+    let button = KeyCaptureButton(binding: seed)
+    button.capturesModifiersAlone = true
+    let width: CGFloat = 160
+    let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: 26))
+    button.frame = NSRect(x: (width - 120) / 2, y: 0, width: 120, height: 26)
+    container.addSubview(button)
+    alert.accessoryView = container
+
+    NSApp.activate(ignoringOtherApps: true)
+    let response = alert.runModal()
+    button.cancelCapture()
+
+    return response == .alertFirstButtonReturn ? button.binding : nil
 }
 
 // MARK: - Single custom-keypress capture dialog
