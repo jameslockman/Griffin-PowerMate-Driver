@@ -332,10 +332,7 @@ wsCenter.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: ni
 // can still access the menu. Check starts after a short delay to let the
 // status item settle into its position on launch.
 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-    updateDockIconVisibility()
-    Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
-        updateDockIconVisibility()
-    }
+    updateDockIconVisibilityAndTimer()
 }
 
 app.run()

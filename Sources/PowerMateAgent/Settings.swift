@@ -18,6 +18,7 @@ let kAudioStepSwapped  = "audioStepSwapped"
 let kScrollAxesSwapped = "scrollAxesSwapped"
 let kFineScroll        = "fineScrollEnabled"
 let kKeypressMode      = "keypressModeEnabled"
+let kHideDockIcon      = "hideDockIcon"
 
 // MARK: - Global (not per-app) persistent state
 
