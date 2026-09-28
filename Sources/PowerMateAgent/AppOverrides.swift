@@ -84,13 +84,24 @@ func frontmostBundleID() -> String? {
     NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 }
 
+/// Resolves an override against the base. An override, once it exists, is a complete and
+/// independent snapshot — every field is whatever was explicitly set for that app, never
+/// inherited from the global default. holdKey and pressTurnOncePerPress both follow this rule
+/// now that each has a real per-app control (the Long press pop-up's "Hold Key While
+/// Pressed..." item and "Press + Turn Fires Once Per Press" checkbox, in
+/// AppOverridesWindow.swift) — no field currently needs special-casing here. If a future field
+/// is added without a per-app control of its own, and should keep following the global default
+/// regardless, that's where such a case would go: fall back to `base`'s value only for that
+/// field, right before returning.
+func resolvedSettings(override: AppSettings?, base: AppSettings) -> AppSettings {
+    override ?? base
+}
+
 /// The effective settings for whatever app is currently frontmost: its override if one is
 /// configured, otherwise the global default.
 func currentSettings() -> AppSettings {
-    guard let bundleID = frontmostBundleID(), let override = perAppSettings[bundleID] else {
-        return defaultSettings
-    }
-    return override
+    guard let bundleID = frontmostBundleID() else { return defaultSettings }
+    return resolvedSettings(override: perAppSettings[bundleID], base: defaultSettings)
 }
 
 /// Mutates whichever settings are currently in effect for the frontmost app — its per-app

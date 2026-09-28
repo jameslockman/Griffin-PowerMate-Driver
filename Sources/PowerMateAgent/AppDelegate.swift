@@ -10,6 +10,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
     }
 
+    /// Quitting while the PowerMate button is held would otherwise leave the held key (e.g. Fn)
+    /// down at the window server with nobody left to release it.
+    func applicationWillTerminate(_ notification: Notification) {
+        endHoldKey()
+    }
+
     /// Right-click (or click-and-hold) on the Dock icon shows the same menu as the menu bar.
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
         return menu
