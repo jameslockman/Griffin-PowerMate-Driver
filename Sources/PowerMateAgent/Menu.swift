@@ -394,11 +394,6 @@ func buildMenu() {
     menuHandler.vuMeterItem = vuMeterItem
     menu.addItem(vuMeterItem)
 
-    let ledItem = NSMenuItem(title: "LED Light", action: #selector(MenuHandler.toggleLED), keyEquivalent: "")
-    ledItem.target = menuHandler
-    menuHandler.ledItem = ledItem
-    menu.addItem(ledItem)
-
     let audioStepSwappedItem = NSMenuItem(title: "Prefer Fine volume in audio mode", action: #selector(MenuHandler.toggleAudioStepSwapped), keyEquivalent: "")
     audioStepSwappedItem.target = menuHandler
     menuHandler.audioStepSwappedItem = audioStepSwappedItem
@@ -557,6 +552,11 @@ func buildMenu() {
     menu.addItem(longPressSub)
 
     menu.addItem(NSMenuItem.separator())
+
+    let ledItem = NSMenuItem(title: "LED Light", action: #selector(MenuHandler.toggleLED), keyEquivalent: "")
+    ledItem.target = menuHandler
+    menuHandler.ledItem = ledItem
+    menu.addItem(ledItem)
 
     let configScriptsItem = NSMenuItem(title: "Configure Scripts...", action: #selector(MenuHandler.configureScripts), keyEquivalent: "")
     configScriptsItem.target = menuHandler
