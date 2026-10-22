@@ -23,6 +23,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     var doubleClickPlayPauseItem: NSMenuItem!
     var doubleClickCustomItem: NSMenuItem!
     var vuMeterItem: NSMenuItem!
+    var ledItem: NSMenuItem!
     var longPressRightItem: NSMenuItem!
     var longPressLeftItem: NSMenuItem!
     var longPressDoubleItem: NSMenuItem!
@@ -58,6 +59,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         doubleClickCustomItem.state    = (defaultSettings.doubleClickAction.customBinding != nil) ? .on : .off
         doubleClickCustomItem.title    = customKeypressTitle(defaultSettings.doubleClickAction.customBinding)
         vuMeterItem.state             = vuMeterEnabled ? .on : .off
+        ledItem.state                 = ledEnabled ? .on : .off
         // Hold Key lives in this same menu but is a separate field (holdKey), not one more
         // LongPressAction case — so its checkmark and every other item's checkmark here are
         // kept mutually exclusive by hand: none of the other actions show as checked while a
@@ -196,6 +198,13 @@ final class MenuHandler: NSObject, NSMenuDelegate {
                 setLEDOffMain(80)
             }
         }
+        updateMenuState()
+    }
+
+    @objc func toggleLED() {
+        ledEnabled.toggle()
+        defaults.set(ledEnabled, forKey: kLEDEnabled)
+        if driver.isConnected { setLEDOffMain(80) }
         updateMenuState()
     }
 
@@ -384,6 +393,11 @@ func buildMenu() {
     vuMeterItem.target = menuHandler
     menuHandler.vuMeterItem = vuMeterItem
     menu.addItem(vuMeterItem)
+
+    let ledItem = NSMenuItem(title: "LED Light", action: #selector(MenuHandler.toggleLED), keyEquivalent: "")
+    ledItem.target = menuHandler
+    menuHandler.ledItem = ledItem
+    menu.addItem(ledItem)
 
     let audioStepSwappedItem = NSMenuItem(title: "Prefer Fine volume in audio mode", action: #selector(MenuHandler.toggleAudioStepSwapped), keyEquivalent: "")
     audioStepSwappedItem.target = menuHandler
