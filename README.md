@@ -253,7 +253,7 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 
 #### 1.0.21
 
-**LED Light**: a new option to enable or disable the PowerMate's LED light. Enabled by default, this switch allows you to turn off the LED completely when it is disabled. Thank you to GitHub user jweimer for the great suggestion!
+**LED Light**: a new option to enable or disable the PowerMate's LED light. Enabled by default, this switch allows you to turn off the LED completely when it is disabled. Thank you to GitHub user @jwiemer for the great suggestion!
 
 #### 1.0.20
 
