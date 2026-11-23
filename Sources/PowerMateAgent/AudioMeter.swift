@@ -22,6 +22,7 @@ private func loadSound(_ name: String) -> NSSound? {
 /// toAudio: false → switching back to scroll mode ("ToScroll" bundle sound or "Glass" fallback)
 func signalModeChange(toAudio: Bool) {
     ledQueue.async {
+        guard ledEnabled else { return }
         for _ in 0..<2 {
             _ = driver.setLEDBrightness(255)
             Thread.sleep(forTimeInterval: 0.055)

@@ -8,7 +8,8 @@ import AppKit
 let ledQueue = DispatchQueue(label: "com.powermate.agent.led", qos: .utility)
 
 func setLEDOffMain(_ value: UInt8) {
-    ledQueue.async { _ = driver.setLEDBrightness(value) }
+    let brightness = ledEnabled ? value : 0
+    ledQueue.async { _ = driver.setLEDBrightness(brightness) }
 }
 
 // MARK: - Throb animation

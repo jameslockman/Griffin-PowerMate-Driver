@@ -18,11 +18,15 @@ let kAudioStepSwapped  = "audioStepSwapped"
 let kScrollAxesSwapped = "scrollAxesSwapped"
 let kFineScroll        = "fineScrollEnabled"
 let kKeypressMode      = "keypressModeEnabled"
+let kLEDEnabled       = "ledEnabled"
 
 // MARK: - Global (not per-app) persistent state
 
 // VU meter defaults to true for existing users; only false if explicitly disabled.
 var vuMeterEnabled = defaults.object(forKey: kVUMeter) == nil ? true : defaults.bool(forKey: kVUMeter)
+
+// LED light defaults to on; when off, every LED update is sent as 0 (see setLEDOffMain).
+var ledEnabled = defaults.object(forKey: kLEDEnabled) == nil ? true : defaults.bool(forKey: kLEDEnabled)
 
 // MARK: - Click action
 

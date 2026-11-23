@@ -23,6 +23,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
     var doubleClickPlayPauseItem: NSMenuItem!
     var doubleClickCustomItem: NSMenuItem!
     var vuMeterItem: NSMenuItem!
+    var ledItem: NSMenuItem!
     var longPressRightItem: NSMenuItem!
     var longPressLeftItem: NSMenuItem!
     var longPressDoubleItem: NSMenuItem!
@@ -58,6 +59,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         doubleClickCustomItem.state    = (defaultSettings.doubleClickAction.customBinding != nil) ? .on : .off
         doubleClickCustomItem.title    = customKeypressTitle(defaultSettings.doubleClickAction.customBinding)
         vuMeterItem.state             = vuMeterEnabled ? .on : .off
+        ledItem.state                 = ledEnabled ? .on : .off
         // Hold Key lives in this same menu but is a separate field (holdKey), not one more
         // LongPressAction case — so its checkmark and every other item's checkmark here are
         // kept mutually exclusive by hand: none of the other actions show as checked while a
@@ -199,6 +201,13 @@ final class MenuHandler: NSObject, NSMenuDelegate {
         updateMenuState()
     }
 
+    @objc func toggleLED() {
+        ledEnabled.toggle()
+        defaults.set(ledEnabled, forKey: kLEDEnabled)
+        if driver.isConnected { setLEDOffMain(80) }
+        updateMenuState()
+    }
+
     private func setLongPressAction(_ action: LongPressAction) {
         defaultSettings.longPressAction = action
         // Choosing an actual Long-press action means Hold Key isn't in effect anymore --
@@ -256,9 +265,9 @@ final class MenuHandler: NSObject, NSMenuDelegate {
 
     @objc func showHelp() {
         let lines: [(String, String)] = [
-            ("", "PowerMate Agent runs in the background and turns the PowerMate into a scroll wheel or volume control.\n"),
+            ("", "PowerMate Agent runs in the background and turns the PowerMate into a scroll wheel or volume control. It can also run scripts.\n"),
             ("Scroll mode, Audio mode, Keypress mode", " – Mutually exclusive: pick one to set what turning the PowerMate does by default."),
-            ("VU Meter", " – Pulse the blue LED in time with your audio stream."),
+            ("VU Meter", " – Pulse the blue LED in time with your audio stream when in Audio mode."),
             ("Prefer Fine volume in audio mode", " – Swap normal and fine volume steps in audio mode."),
             ("Reverse scroll direction", " – Reverses the scroll direction in scroll mode."),
             ("Prefer Fine scrolling", " – Scroll by single-pixel increments instead of the default coarse step for precise control."),
@@ -275,6 +284,7 @@ final class MenuHandler: NSObject, NSMenuDelegate {
             ("Shift + Option + turn (scroll mode)", " – Scroll on the alternate axis in fine mode."),
             ("Press + turn (audio or scroll mode)", " – Skip to next or previous track in the current media player."),
             ("Shift + click/double-click", " – When set to Mute/Unmute or Play/Pause, alternates to the other action instead.\n"),
+            ("LED Light", " – Enable or disable the device's LED light.\n"),
             ("Configure Scripts", " – Sets shell commands for long press (and Shift+long press).\n"),
             ("Configure Applications", " – Override the mode and its settings for specific apps, independent of the defaults above. Add an app, then set its mode (Scroll/Audio/Keypress) and behavior.\n"),
             ("Feedback/bug report", " - Let us know if you have any issues or suggestions."),
@@ -543,6 +553,11 @@ func buildMenu() {
     menu.addItem(longPressSub)
 
     menu.addItem(NSMenuItem.separator())
+
+    let ledItem = NSMenuItem(title: "LED Light", action: #selector(MenuHandler.toggleLED), keyEquivalent: "")
+    ledItem.target = menuHandler
+    menuHandler.ledItem = ledItem
+    menu.addItem(ledItem)
 
     let configScriptsItem = NSMenuItem(title: "Configure Scripts...", action: #selector(MenuHandler.configureScripts), keyEquivalent: "")
     configScriptsItem.target = menuHandler
