@@ -37,7 +37,7 @@ The PowerMate can also act as a mouse button. **Click**, **Double-click**, and *
 
 <img width="350"  alt="Script execution mode" src="/images/configureScripts.png" />
 
-**Audio mode**: Enable "Audio mode" in the menu and the knob adjusts system volume while the button toggles mute. When audio mode is active, the LED brightens and dims in sync with the amplitude of whatever is playing through your speakers. A short sound cue confirms the switch — up when entering audio mode, and down when returning to scroll. The menu bar icon's ring turns blue while audio mode is active so you can tell at a glance which mode you're in.
+**Audio mode**: Enable "Audio mode" in the menu and the knob adjusts system volume while the button toggles mute. When audio mode is active, the LED brightens and dims in sync with the amplitude of whatever is playing through your speakers. A short sound cue confirms the switch — up when entering audio mode, and down when returning to scroll. The menu bar icon's ring turns blue while audio mode is active so you can tell at a glance which mode you're in. You can also enable the **VU Meter**, which will pulse the PowerMate's LED to match your audio stream. You can also disable the LED completely using the "LED light" menu option.
 
 Volume control works exactly like the physical keyboard volume keys:
 
@@ -57,8 +57,6 @@ Enable **Default to horizontal scroll** in the menu to swap the axes — turning
 **Press and turn** — hold the button and turn the knob to skip tracks in the current media player. Turn clockwise to skip to the next track, counter-clockwise to go back. (In Keypress mode, this is replaced by whatever key you've configured for "Press + Turn".)
 
 When Click or Double-click is set to **Mute/Unmute** or **Play/Pause**, holding **Shift** activates the other action instead — so you can reach both without changing the menu setting.
-
-The **VU Meter** (LED amplitude display) can be toggled independently of audio mode via its own menu item.
 
 **Configure Applications**: want different behavior in different apps? Open **Configure Applications...** in the menu, click **+**, and choose an app. Each configured app gets its own completely independent settings — mode, scroll/audio options, key bindings, and Click/Double-click/Long press actions (including custom keypresses and its own Run Script override) — which take over automatically whenever that app is in the foreground. Anything you haven't set for a given app falls back to your regular defaults.
 
@@ -252,6 +250,10 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 - Apple IOKit HID: `IOHIDManager`, `IOHIDDeviceOpen`, `IOHIDDeviceRegisterInputReportCallback`
 
 ### Versions
+
+#### 1.0.21
+
+**LED Light**: a new option to enable or disable the PowerMate's LED light. Enabled by default, this switch allows you to turn off the LED completely when it is disabled. Thank you to GitHub user jweimer for the great suggestion!
 
 #### 1.0.20
 
